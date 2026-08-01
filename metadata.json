@@ -1,0 +1,6 @@
+{
+  "name": "AI Lab Academy",
+  "description": "Interactive AI learning platform with courses, lessons, and hands-on lab environments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

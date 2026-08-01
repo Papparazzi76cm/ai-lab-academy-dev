@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { RequireRole } from "@/components/auth/RouteGuard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,6 +74,14 @@ function linkValue(links: unknown, key: string): string {
 }
 
 function AdminInstructorsPage() {
+  return (
+    <RequireRole roles={["admin"]}>
+      <AdminInstructorsContent />
+    </RequireRole>
+  );
+}
+
+function AdminInstructorsContent() {
   const queryClient = useQueryClient();
   const { data: instructors = [], isLoading } = useQuery(adminInstructorsQuery());
   const [draft, setDraft] = useState<Draft | null>(null);

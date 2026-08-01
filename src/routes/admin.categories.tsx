@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { RequireRole } from "@/components/auth/RouteGuard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,6 +59,14 @@ const emptyDraft: Draft = {
 };
 
 function AdminCategoriesPage() {
+  return (
+    <RequireRole roles={["admin"]}>
+      <AdminCategoriesContent />
+    </RequireRole>
+  );
+}
+
+function AdminCategoriesContent() {
   const queryClient = useQueryClient();
   const { data: categories = [], isLoading } = useQuery(adminCategoriesQuery());
   const [draft, setDraft] = useState<Draft | null>(null);

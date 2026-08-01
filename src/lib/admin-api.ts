@@ -96,10 +96,37 @@ export const adminCoursesQuery = () =>
   queryOptions({
     queryKey: ["admin", "courses"],
     queryFn: async (): Promise<AdminCourseRow[]> => {
-      const { data, error } = await supabase
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return [];
+
+      const { data: rolesData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+
+      const roles = (rolesData ?? []).map((r) => r.role);
+      const isAdmin = roles.includes("admin");
+
+      let query = supabase
         .from("courses")
         .select("*, categories(id, name, slug), instructors(id, name)")
         .order("updated_at", { ascending: false });
+
+      if (!isAdmin) {
+        const { data: instructor } = await supabase
+          .from("instructors")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!instructor) return [];
+        query = query.eq("instructor_id", instructor.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as AdminCourseRow[];
     },
@@ -109,13 +136,40 @@ export const adminCourseQuery = (courseId: string) =>
   queryOptions({
     queryKey: ["admin", "course", courseId],
     queryFn: async (): Promise<AdminCourseDetail | null> => {
-      const { data, error } = await supabase
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return null;
+
+      const { data: rolesData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+
+      const roles = (rolesData ?? []).map((r) => r.role);
+      const isAdmin = roles.includes("admin");
+
+      let query = supabase
         .from("courses")
         .select("*, modules(*, lessons(*, resources(*)))")
-        .eq("id", courseId)
-        .maybeSingle();
+        .eq("id", courseId);
+
+      if (!isAdmin) {
+        const { data: instructor } = await supabase
+          .from("instructors")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!instructor) return null;
+        query = query.eq("instructor_id", instructor.id);
+      }
+
+      const { data, error } = await query.maybeSingle();
       if (error) throw error;
       if (!data) return null;
+
       const detail = data as AdminCourseDetail;
       detail.modules = [...detail.modules]
         .sort((a, b) => a.position - b.position)
@@ -173,47 +227,9 @@ export const adminStatsQuery = () =>
   queryOptions({
     queryKey: ["admin", "stats"],
     queryFn: async (): Promise<AdminStats> => {
-      const count = async (
-        table: "courses" | "categories" | "instructors" | "modules" | "lessons",
-      ) => {
-        const { count: value, error } = await supabase
-          .from(table)
-          .select("id", { count: "exact", head: true });
-        if (error) throw error;
-        return value ?? 0;
-      };
-
-      const countCourses = async (status: CourseStatus) => {
-        const { count: value, error } = await supabase
-          .from("courses")
-          .select("id", { count: "exact", head: true })
-          .eq("status", status);
-        if (error) throw error;
-        return value ?? 0;
-      };
-
-      const [courses, published, drafts, archived, categories, instructors, modules, lessons] =
-        await Promise.all([
-          count("courses"),
-          countCourses("published"),
-          countCourses("draft"),
-          countCourses("archived"),
-          count("categories"),
-          count("instructors"),
-          count("modules"),
-          count("lessons"),
-        ]);
-
-      return {
-        courses,
-        published,
-        drafts,
-        archived,
-        categories,
-        instructors,
-        modules,
-        lessons,
-      };
+      const { data, error } = await supabase.rpc("get_cms_stats");
+      if (error) throw error;
+      return data as AdminStats;
     },
   });
 
@@ -229,52 +245,23 @@ export const adminRecentChangesQuery = () =>
   queryOptions({
     queryKey: ["admin", "recent-changes"],
     queryFn: async (): Promise<RecentChange[]> => {
-      const [courses, modules, lessons] = await Promise.all([
-        supabase
-          .from("courses")
-          .select("id, title, updated_at")
-          .order("updated_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("modules")
-          .select("id, title, course_id, updated_at")
-          .order("updated_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("lessons")
-          .select("id, title, course_id, updated_at")
-          .order("updated_at", { ascending: false })
-          .limit(8),
-      ]);
-      if (courses.error) throw courses.error;
-      if (modules.error) throw modules.error;
-      if (lessons.error) throw lessons.error;
-
-      const items: RecentChange[] = [
-        ...(courses.data ?? []).map((c) => ({
-          id: c.id,
-          type: "Curso" as const,
-          title: c.title,
-          courseId: c.id,
-          updatedAt: c.updated_at,
-        })),
-        ...(modules.data ?? []).map((m) => ({
-          id: m.id,
-          type: "Módulo" as const,
-          title: m.title,
-          courseId: m.course_id,
-          updatedAt: m.updated_at,
-        })),
-        ...(lessons.data ?? []).map((l) => ({
-          id: l.id,
-          type: "Lección" as const,
-          title: l.title,
-          courseId: l.course_id,
-          updatedAt: l.updated_at,
-        })),
-      ];
-
-      return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 10);
+      const { data, error } = await supabase.rpc("get_cms_recent_changes");
+      if (error) throw error;
+      return (data ?? []).map(
+        (item: {
+          id: string;
+          type: "Curso" | "Módulo" | "Lección";
+          title: string;
+          course_id: string;
+          updated_at: string;
+        }) => ({
+          id: item.id,
+          type: item.type,
+          title: item.title,
+          courseId: item.course_id,
+          updatedAt: item.updated_at,
+        }),
+      );
     },
   });
 
@@ -296,101 +283,13 @@ export const updateCourse = (id: string, values: TablesUpdate<"courses">) =>
 
 export const deleteCourse = (id: string) => run(supabase.from("courses").delete().eq("id", id));
 
-/** Duplica un curso con sus módulos, lecciones y recursos en estado borrador. */
-export async function duplicateCourse(courseId: string, takenSlugs: string[]) {
-  const { data, error } = await supabase
-    .from("courses")
-    .select("*, modules(*, lessons(*, resources(*)))")
-    .eq("id", courseId)
-    .single();
+/** Duplica un curso con sus módulos, lecciones y recursos en estado borrador usando una función RPC atómica. */
+export async function duplicateCourse(courseId: string, _takenSlugs?: string[]) {
+  const { data, error } = await supabase.rpc("duplicate_course_rpc", {
+    p_course_id: courseId,
+  });
   if (error) throw error;
-  const source = data as AdminCourseDetail;
-
-  const {
-    id: _id,
-    created_at: _createdAt,
-    updated_at: _updatedAt,
-    modules,
-    ...rest
-  } = source as AdminCourseDetail & { modules: AdminCourseDetail["modules"] };
-
-  const copy = await run(
-    supabase
-      .from("courses")
-      .insert({
-        ...rest,
-        title: `${source.title} (copia)`,
-        slug: uniqueSlug(`${source.slug}-copia`, takenSlugs),
-        status: "draft" as const,
-        published_at: null,
-        students_count: 0,
-        rating: 0,
-        ratings_count: 0,
-      })
-      .select("id")
-      .single(),
-  );
-
-  for (const mod of modules ?? []) {
-    const newModule = await run(
-      supabase
-        .from("modules")
-        .insert({
-          course_id: copy.id,
-          title: mod.title,
-          description: mod.description,
-          position: mod.position,
-          status: mod.status,
-        })
-        .select("id")
-        .single(),
-    );
-
-    for (const lesson of mod.lessons ?? []) {
-      const newLesson = await run(
-        supabase
-          .from("lessons")
-          .insert({
-            course_id: copy.id,
-            module_id: newModule.id,
-            title: lesson.title,
-            slug: lesson.slug,
-            summary: lesson.summary,
-            content: lesson.content,
-            content_text: lesson.content_text,
-            duration_minutes: lesson.duration_minutes,
-            status: lesson.status,
-            type: lesson.type,
-            is_free_preview: lesson.is_free_preview,
-            position: lesson.position,
-            video_url: lesson.video_url,
-          })
-          .select("id")
-          .single(),
-      );
-
-      for (const resource of lesson.resources ?? []) {
-        await run(
-          supabase
-            .from("resources")
-            .insert({
-              course_id: copy.id,
-              lesson_id: newLesson.id,
-              title: resource.title,
-              description: resource.description,
-              kind: resource.kind,
-              url: resource.url,
-              position: resource.position,
-              size_bytes: resource.size_bytes,
-            })
-            .select("id")
-            .single(),
-        );
-      }
-    }
-  }
-
-  return copy;
+  return { id: data as string };
 }
 
 export const createCategory = (values: TablesInsert<"categories">) =>
@@ -435,16 +334,14 @@ export const updateResource = (id: string, values: TablesUpdate<"resources">) =>
 
 export const deleteResource = (id: string) => run(supabase.from("resources").delete().eq("id", id));
 
-/** Persiste el nuevo orden de una lista de módulos o lecciones. */
+/** Persiste el nuevo orden de una lista de módulos o lecciones de forma atómica. */
 export async function persistOrder(table: "modules" | "lessons", ids: string[]) {
-  await Promise.all(
-    ids.map((id, index) =>
-      supabase
-        .from(table)
-        .update({ position: index + 1 })
-        .eq("id", id),
-    ),
-  );
+  const items = ids.map((id, index) => ({ id, position: index + 1 }));
+  const { error } = await supabase.rpc("reorder_items_rpc", {
+    p_table: table,
+    p_items: items,
+  });
+  if (error) throw error;
 }
 
 /** Duración total de un módulo calculada a partir de sus lecciones. */
