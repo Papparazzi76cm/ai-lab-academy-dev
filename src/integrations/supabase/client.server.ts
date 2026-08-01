@@ -33,12 +33,23 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 function createSupabaseAdminClient() {
-  const SUPABASE_URL = process.env["SUPABASE_URL"] || "https://placeholder.supabase.co";
-  const SUPABASE_SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"] || "placeholder-key";
+  const envUrl = process.env["SUPABASE_URL"];
+  const envKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const isProd = process.env.NODE_ENV === "production";
 
-  if (!process.env["SUPABASE_URL"] || !process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
-    console.warn("[Supabase Admin] Environment variables missing. Using placeholder client.");
+  if (!envUrl || !envKey) {
+    if (isProd) {
+      throw new Error(
+        "Error de configuración de Supabase Admin: Faltan las variables SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el servidor en producción.",
+      );
+    }
+    console.error(
+      "⚠️ [Supabase Admin] ADVERTENCIA CRÍTICA: No se encontraron las variables de entorno de Supabase Admin (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY). Supabase Admin NO está configurado.",
+    );
   }
+
+  const SUPABASE_URL = envUrl || "https://placeholder.supabase.co";
+  const SUPABASE_SERVICE_ROLE_KEY = envKey || "placeholder-key";
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     global: {

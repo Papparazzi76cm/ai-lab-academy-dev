@@ -887,6 +887,7 @@ export type Database = {
           created_at: string;
           description: string | null;
           id: string;
+          is_public: boolean;
           kind: string;
           lesson_id: string | null;
           position: number;
@@ -900,6 +901,7 @@ export type Database = {
           created_at?: string;
           description?: string | null;
           id?: string;
+          is_public?: boolean;
           kind?: string;
           lesson_id?: string | null;
           position?: number;
@@ -913,6 +915,7 @@ export type Database = {
           created_at?: string;
           description?: string | null;
           id?: string;
+          is_public?: boolean;
           kind?: string;
           lesson_id?: string | null;
           position?: number;

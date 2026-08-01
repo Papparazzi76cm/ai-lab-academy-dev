@@ -30,20 +30,24 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL =
-    import.meta.env["VITE_SUPABASE_URL"] ||
-    process.env["SUPABASE_URL"] ||
-    "https://placeholder.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
-    process.env["SUPABASE_PUBLISHABLE_KEY"] ||
-    "placeholder-key";
+  const envUrl = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
+  const envKey =
+    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_PUBLISHABLE_KEY"];
+  const isProd = import.meta.env.PROD || process.env.NODE_ENV === "production";
 
-  if (!import.meta.env["VITE_SUPABASE_URL"] && !process.env["SUPABASE_URL"]) {
-    console.warn("[Supabase] Environment variables missing. Using placeholder client.");
+  if (!envUrl || !envKey) {
+    if (isProd) {
+      throw new Error(
+        "Error de configuración de Supabase: Faltan las variables VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY en producción.",
+      );
+    }
+    console.error(
+      "⚠️ [Supabase] ADVERTENCIA CRÍTICA: No se encontraron las variables de entorno de Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY). Supabase NO está configurado.",
+    );
   }
+
+  const SUPABASE_URL = envUrl || "https://placeholder.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = envKey || "placeholder-key";
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: {

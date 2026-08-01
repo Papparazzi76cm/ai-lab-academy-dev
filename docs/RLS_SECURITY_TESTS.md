@@ -1,17 +1,19 @@
 # RLS & Security Policy Documentation & Testing
 
-This document details the Row Level Security (RLS) policies, PostgreSQL triggers, and RPC security functions applied to NeuraLab's Academic CMS.
+This document details the Row Level Security (RLS) policies, PostgreSQL triggers, and RPC security functions applied to AI Lab Academy's Academic CMS.
 
 ---
 
-## 1. Role Hierarchy
+## 1. Role Hierarchy & Access Matrix
 
 - **`anon` (Unauthenticated)**:
-  - Can read published courses, categories, instructors, modules, lessons, and resources.
+  - Can read published courses, categories, instructors, modules, and lessons.
+  - Can ONLY read resources with `is_public = true` belonging to published, free-preview lessons (`is_free_preview = true`).
   - Cannot access any `/admin/*` routes or perform CUD operations.
 
 - **`student` (Authenticated User)**:
-  - Can read published course catalog and enrolled lesson content.
+  - Can read published course catalog.
+  - Can read resources of courses where they have an active enrollment (`public.enrollments`), plus public resources of free lessons.
   - Cannot access `/admin/*` routes.
   - Blocked by RLS policies from creating/editing courses, modules, lessons, resources, categories, or instructors.
 
@@ -19,6 +21,7 @@ This document details the Row Level Security (RLS) policies, PostgreSQL triggers
   - Can access `/admin/` (Dashboard) and `/admin/courses` (CMS Course Editor).
   - Can ONLY view and manage courses assigned to their instructor record (`instructor_id = private.get_instructor_id_for_user(auth.uid())`).
   - Automatically linked to newly created courses via database trigger `trg_course_instructor_assignment`.
+  - Can read and manage resources (`public.resources`) of their owned courses.
   - Stats (`get_cms_stats`) and activity logs (`get_cms_recent_changes`) are strictly scoped to their owned courses, modules, and lessons.
   - Blocked from `/admin/categories` and `/admin/instructors` routes via explicit route guards (`RequireRole roles={["admin"]}`) and RLS policies.
   - Prevented from modifying instructor roles or active status via database trigger `trg_prevent_instructor_escalation`.
@@ -26,11 +29,26 @@ This document details the Row Level Security (RLS) policies, PostgreSQL triggers
 - **`admin` (Administrator)**:
   - Has full system access across all CMS management routes (`/admin/categories`, `/admin/instructors`, `/admin/courses`, etc.).
   - Global statistics and recent activity logs.
-  - Can duplicate courses, reorder items, and update all entities atomically.
+  - Can duplicate courses, reorder items, and manage all entities atomically.
 
 ---
 
-## 2. Core RPCs & Security Functions
+## 2. Resource RLS Security Rules (`public.resources`)
+
+1. **`is_public` Flag**:
+   - `is_public BOOLEAN NOT NULL DEFAULT false` column added to `public.resources`.
+2. **Anon Policy**:
+   - `SELECT` allowed ONLY IF `is_public = true` AND lesson is published (`status = 'published'`) and free preview (`is_free_preview = true`) in a published course.
+3. **Student Policy**:
+   - `SELECT` allowed IF enrolled in the course OR resource is public free preview.
+4. **Instructor Policy**:
+   - `SELECT`, `INSERT`, `UPDATE`, `DELETE` allowed ONLY for courses owned by the instructor (`private.is_course_instructor(...)`).
+5. **Admin Policy**:
+   - Full read/write access to all resources.
+
+---
+
+## 3. Core RPCs & Security Functions
 
 1. **`private.has_role(p_user_id, p_role)`**:
    Returns true if `p_user_id` possesses `p_role` in `public.user_roles`.
@@ -52,7 +70,7 @@ This document details the Row Level Security (RLS) policies, PostgreSQL triggers
 
 ---
 
-## 3. Database Triggers
+## 4. Database Triggers
 
 1. **`trg_course_instructor_assignment`**:
    Before inserting a course, if the caller is an instructor without an explicit `instructor_id`, automatically assigns their instructor ID.
@@ -62,14 +80,22 @@ This document details the Row Level Security (RLS) policies, PostgreSQL triggers
 
 ---
 
-## 4. Verification & Testing Matrix
+## 5. Executable SQL Test Suite
 
-| Test Case | Role | Target Resource | Action | Expected Result |
-| :--- | :--- | :--- | :--- | :--- |
-| **TC-01** | `instructor` | `/admin/categories` | Navigate | Redirected / Access Denied by `RequireRole` guard |
-| **TC-02** | `instructor` | `/admin/instructors` | Navigate | Redirected / Access Denied by `RequireRole` guard |
-| **TC-03** | `instructor` | Other Instructor's Course | SELECT / UPDATE | Returns 0 rows / Permission Denied by RLS & `adminCourseQuery` |
-| **TC-04** | `instructor` | `get_cms_stats()` | RPC Call | Returns count of own courses/modules/lessons only |
-| **TC-05** | `instructor` | `duplicate_course_rpc()` | RPC Call | Successfully clones own course; fails on other's course |
-| **TC-06** | `admin` | `/admin/categories` | CUD | Full CRUD permissions granted |
-| **TC-07** | `admin` | `get_cms_stats()` | RPC Call | Returns global counts across entire platform |
+The automated, executable SQL test suite is located at:
+`supabase/tests/rls_security_tests.sql`
+
+To execute the test suite in psql or Supabase SQL Editor:
+
+```sql
+\i supabase/tests/rls_security_tests.sql
+```
+
+The script runs inside a transaction block (`BEGIN ... ROLLBACK`) and tests all 6 core scenarios:
+
+1. **Anon**: Verifies access to public free preview resources only.
+2. **Student (not enrolled)**: Verifies denial of paid/private course resources.
+3. **Student (enrolled)**: Verifies full access to resources of enrolled courses.
+4. **Instructor (owner)**: Verifies read/update access to resources of owned courses.
+5. **Instructor (non-owner)**: Verifies access denial to resources of other instructors' courses.
+6. **Admin**: Verifies global read/update access across all resources.
