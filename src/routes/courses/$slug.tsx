@@ -11,6 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { courseQuery, formatDuration, formatPrice, levelLabel } from "@/lib/api";
+import { slugify } from "@/lib/admin-api";
 
 export const Route = createFileRoute("/courses/$slug")({
   head: () => ({
@@ -55,9 +56,11 @@ function CourseDetail() {
   }
 
   const modules = [...(course.modules ?? [])].sort((a, b) => a.position - b.position);
-  const firstLesson = modules
-    .flatMap((m) => m.lessons ?? [])
-    .sort((a, b) => a.position - b.position)[0];
+  const firstModule = modules[0];
+  const firstLesson = firstModule?.lessons
+    ? [...firstModule.lessons].sort((a, b) => a.position - b.position)[0]
+    : null;
+  const firstModuleSlug = firstModule ? slugify(firstModule.title) || firstModule.id : "modulo";
 
   return (
     <PageShell>
@@ -113,8 +116,12 @@ function CourseDetail() {
                             .map((lesson) => (
                               <li key={lesson.id}>
                                 <Link
-                                  to="/learn/$courseSlug/$lessonSlug"
-                                  params={{ courseSlug: course.slug, lessonSlug: lesson.slug }}
+                                  to="/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug"
+                                  params={{
+                                    courseSlug: course.slug,
+                                    moduleSlug: slugify(mod.title) || mod.id,
+                                    lessonSlug: lesson.slug,
+                                  }}
                                   className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-secondary"
                                 >
                                   <BookOpen className="size-4 text-muted-foreground" />
@@ -156,8 +163,12 @@ function CourseDetail() {
                 <Button className="mt-5 w-full" size="lg" asChild disabled={!firstLesson}>
                   {firstLesson ? (
                     <Link
-                      to="/learn/$courseSlug/$lessonSlug"
-                      params={{ courseSlug: course.slug, lessonSlug: firstLesson.slug }}
+                      to="/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug"
+                      params={{
+                        courseSlug: course.slug,
+                        moduleSlug: firstModuleSlug,
+                        lessonSlug: firstLesson.slug,
+                      }}
                     >
                       Empezar curso
                     </Link>

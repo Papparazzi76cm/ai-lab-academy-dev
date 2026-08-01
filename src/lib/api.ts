@@ -78,6 +78,22 @@ export const lessonQuery = (courseSlug: string, lessonSlug: string) =>
     },
   });
 
+export const publishedLessonBlocksQuery = (lessonId: string | undefined) =>
+  queryOptions({
+    queryKey: ["published-blocks", lessonId],
+    enabled: Boolean(lessonId),
+    queryFn: async () => {
+      if (!lessonId) return [];
+      const { data, error } = await supabase
+        .from("lesson_blocks")
+        .select("*")
+        .eq("lesson_id", lessonId)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
 export const myProgressQuery = (userId: string | undefined, courseId: string | undefined) =>
   queryOptions({
     queryKey: ["progress", userId, courseId],
