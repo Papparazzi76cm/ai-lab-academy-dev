@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { courseQuery, publishedLessonBlocksQuery, myProgressQuery } from "@/lib/api";
+import { courseQuery, lessonBlocksQuery, myProgressQuery } from "@/lib/api";
 import { parseBlocks, type BlockType, type LessonBlockItem } from "@/lib/blocks";
 import { slugify } from "@/lib/admin-api";
 import type { Tables } from "@/integrations/supabase/types";
@@ -61,11 +61,15 @@ export function useLessonPlayer({ courseSlug, moduleSlug, lessonSlug }: UseLesso
   }, [isCourseLoading, course, activeModule, activeLesson]);
 
   // 4. Fetch User Server Progress
-  const { data: serverProgress = [] } = useQuery(myProgressQuery(user?.id, course?.id));
+  const {
+    data: serverProgress = [],
+    isLoading: isServerProgressLoading,
+    isError: isServerProgressError,
+  } = useQuery(myProgressQuery(user?.id, course?.id));
 
-  // 5. Fetch Published Blocks for active lesson
+  // 5. Fetch Blocks for active lesson
   const { data: rawBlocks = [], isLoading: isBlocksLoading } = useQuery(
-    publishedLessonBlocksQuery(activeLesson?.id),
+    lessonBlocksQuery(activeLesson?.id),
   );
 
   // Parse blocks or fallback to lesson content JSON if published blocks table is empty
@@ -131,6 +135,8 @@ export function useLessonPlayer({ courseSlug, moduleSlug, lessonSlug }: UseLesso
     prevLesson,
     nextLesson,
     serverProgress,
+    isServerProgressLoading,
+    isServerProgressError,
     isCourseLoading,
     isBlocksLoading,
     isCourseError,

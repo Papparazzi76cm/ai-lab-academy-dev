@@ -13,6 +13,8 @@ interface UseLessonProgressParams {
     completed?: boolean | null;
     status?: string | null;
   }>;
+  isServerProgressLoading?: boolean;
+  isServerProgressError?: boolean;
 }
 
 /**
@@ -25,6 +27,8 @@ export function useLessonProgress({
   courseId,
   courseSlug,
   serverProgress = [],
+  isServerProgressLoading = false,
+  isServerProgressError = false,
 }: UseLessonProgressParams) {
   const storageKey = `academy_progress_${userId ?? "guest"}_${courseId ?? courseSlug}`;
 
@@ -33,39 +37,61 @@ export function useLessonProgress({
   // Track last mutation sequence number to prevent stale async responses from overwriting recent user actions
   const lastSeqRef = useRef<number>(0);
 
+  // Reset sequence tracking on user or course identity change
+  useEffect(() => {
+    lastSeqRef.current = 0;
+  }, [userId, courseId]);
+
   // Reconcile server progress with local storage fallback
   useEffect(() => {
-    const nextMap: Record<string, LessonProgressStatus> = {};
-
-    // Server progress is single source of truth for authenticated users
-    serverProgress.forEach((p) => {
-      if (p.completed) {
-        nextMap[p.lesson_id] = "completed";
-      } else if (p.status) {
-        nextMap[p.lesson_id] = p.status as LessonProgressStatus;
-      } else {
-        nextMap[p.lesson_id] = "in_progress";
-      }
-    });
-
-    // Local storage acts as fallback for unauthenticated guest or offline state
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Record<string, LessonProgressStatus>;
-        // If unauthenticated or server returned no progress for a key, merge local fallback
-        Object.entries(parsed).forEach(([lessonId, status]) => {
-          if (!nextMap[lessonId]) {
-            nextMap[lessonId] = status;
-          }
-        });
-      }
-    } catch {
-      // Ignore local storage read errors
+    // If authenticated user and server progress query is still loading, wait for completion
+    if (userId && isServerProgressLoading) {
+      return;
     }
 
-    setStatuses((prev) => ({ ...nextMap, ...prev }));
-  }, [serverProgress, storageKey]);
+    const nextMap: Record<string, LessonProgressStatus> = {};
+
+    if (userId) {
+      if (!isServerProgressError) {
+        // Authenticated user with successful query: serverProgress is EXCLUSIVE source of truth
+        serverProgress.forEach((p) => {
+          if (p.completed) {
+            nextMap[p.lesson_id] = "completed";
+          } else if (p.status) {
+            nextMap[p.lesson_id] = p.status as LessonProgressStatus;
+          } else {
+            nextMap[p.lesson_id] = "in_progress";
+          }
+        });
+        // Lessons not present in serverProgress are treated as not_started automatically
+      } else {
+        // Fallback to localStorage ONLY if authenticated query failed
+        try {
+          const stored = localStorage.getItem(storageKey);
+          if (stored) {
+            const parsed = JSON.parse(stored) as Record<string, LessonProgressStatus>;
+            Object.assign(nextMap, parsed);
+          }
+        } catch {
+          // Ignore read errors
+        }
+      }
+    } else {
+      // Unauthenticated guest user: use localStorage
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored) as Record<string, LessonProgressStatus>;
+          Object.assign(nextMap, parsed);
+        }
+      } catch {
+        // Ignore read errors
+      }
+    }
+
+    // Clean replacement: never merge with previous state from another user/session
+    setStatuses(nextMap);
+  }, [userId, storageKey, serverProgress, isServerProgressLoading, isServerProgressError]);
 
   // Mark lesson as in_progress if not started yet
   const markAsInProgress = useCallback(
@@ -89,6 +115,9 @@ export function useLessonProgress({
   // Toggle completion with optimistic update and rollback on failure
   const toggleCompletion = useCallback(
     async (lessonId: string): Promise<boolean> => {
+      const triggerUserId = userId;
+      const triggerCourseId = courseId;
+
       const currentStatus = statuses[lessonId] || "not_started";
       const isCurrentlyCompleted = currentStatus === "completed";
       const nextStatus: LessonProgressStatus = isCurrentlyCompleted ? "in_progress" : "completed";
@@ -109,12 +138,12 @@ export function useLessonProgress({
       }
 
       // Persist to Supabase if logged in
-      if (userId && courseId) {
+      if (triggerUserId && triggerCourseId) {
         const { error } = await supabase.from("lesson_progress").upsert(
           {
-            user_id: userId,
+            user_id: triggerUserId,
             lesson_id: lessonId,
-            course_id: courseId,
+            course_id: triggerCourseId,
             completed: nextCompleted,
             status: nextStatus,
             completed_at: nextCompleted ? new Date().toISOString() : null,
@@ -122,18 +151,24 @@ export function useLessonProgress({
           { onConflict: "user_id,lesson_id" },
         );
 
-        // If a newer request was made while this one was in flight, ignore rollback
-        if (currentSeq !== lastSeqRef.current) {
+        // If a newer request was made or identity changed while in flight, ignore response
+        if (
+          currentSeq !== lastSeqRef.current ||
+          userId !== triggerUserId ||
+          courseId !== triggerCourseId
+        ) {
           return true;
         }
 
         if (error) {
-          // Revert optimistic update
-          setStatuses(previousStatuses);
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(previousStatuses));
-          } catch {
-            // Ignore
+          // Revert optimistic update only if context still matches
+          if (userId === triggerUserId && courseId === triggerCourseId) {
+            setStatuses(previousStatuses);
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(previousStatuses));
+            } catch {
+              // Ignore
+            }
           }
           toast.error(
             "No se pudo guardar el progreso en el servidor. Se ha restaurado el estado anterior.",

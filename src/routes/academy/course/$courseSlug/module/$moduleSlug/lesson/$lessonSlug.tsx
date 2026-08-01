@@ -17,7 +17,7 @@ export const Route = createFileRoute(
 )({
   head: () => ({
     meta: [
-      { title: `Lección — Academia NeuraLab` },
+      { title: `Lección — AI Lab Academy` },
       { name: "description", content: "Reproductor interactivo de lecciones de la Academia." },
     ],
   }),
@@ -39,6 +39,8 @@ function LessonPlayerPage() {
     prevLesson,
     nextLesson,
     serverProgress,
+    isServerProgressLoading,
+    isServerProgressError,
     isCourseLoading,
     isBlocksLoading,
     isCourseError,
@@ -51,6 +53,8 @@ function LessonPlayerPage() {
     courseId: course?.id,
     courseSlug,
     serverProgress,
+    isServerProgressLoading,
+    isServerProgressError,
   });
 
   // Automatically mark current lesson as "in_progress" if not started
