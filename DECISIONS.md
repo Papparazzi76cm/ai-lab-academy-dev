@@ -19,3 +19,23 @@
 - **Context**: Frequent user typing in text, code, or list blocks would overwhelm database IO if synced on every keypress.
 - **Decision**: Integrated 1-second debounced autosave state tracker (`idle` | `saving` | `saved` | `error`) with a history stack for undo/redo actions.
 - **Justification**: Provides smooth local editing experience with visual feedback ("Guardando...", "Guardado") and protects against network latency.
+
+## Sprint 2.4 — Reproductor de Lecciones (Lesson Player Robustness)
+
+### Decision 1: Postponement of DOM Virtualization for Lesson Blocks
+
+- **Context**: Lesson blocks contain rich content with highly dynamic vertical heights (embedded video player, code snippets with copy controls, expandable callouts, resource downloads, markdown text).
+- **Decision**: Deferred DOM virtualization (e.g. `@tanstack/react-virtual`) for student lesson block lists until real-world telemetry and performance benchmarks prove its necessity.
+- **Justification**: Virtualizing dynamic-height DOM elements causes layout shift, breaks native browser text search (`Ctrl+F`), interferes with screen reader accessibility, and impairs smooth scrolling. Standard DOM rendering comfortably handles typical lesson length (10–50 blocks) with negligible memory footprint.
+
+### Decision 2: Strict Hierarchical Route Resolution
+
+- **Context**: Querying a lesson directly by `lessonSlug` across all course modules using `find()` creates ambiguity if two modules contain lessons with identical slugs or if a lesson is accessed under a different module route.
+- **Decision**: Enforced strict route resolution in `useLessonPlayer`: `CourseBySlug -> ModuleInCourseBySlug -> LessonInModuleBySlug`. If any link in the hierarchy fails, the player returns an explicit 404 state (`LessonNotFound`).
+- **Justification**: Guarantees deterministic routing, prevents cross-module ambiguity, and secures navigation integrity.
+
+### Decision 3: Video Embed Security & Domain Filtering
+
+- **Context**: Rendering raw user-provided `video_url` strings directly in `<iframe>` elements introduces security risks (XSS, clickjacking, dangerous protocols).
+- **Decision**: Routed all video URLs through `getSafeVideoEmbedUrl()` in `src/lib/url-security.ts`, normalizing YouTube (`youtube-nocookie.com`) and Vimeo (`player.vimeo.com`), and validating hostnames against explicit domain allowlists before setting iframe source attributes with `loading="lazy"` and `referrerPolicy="strict-origin-when-cross-origin"`.
+- **Justification**: Prevents unauthorized domain embeds and protects user privacy.

@@ -125,8 +125,25 @@ export function getSafeVimeoEmbedUrl(rawUrl: unknown): string | null {
 }
 
 /**
- * Validates if an iframe URL belongs to an allowed domain (YouTube, Vimeo, Google Drive, or HTTPS).
+ * Resolves a safe video embed URL (YouTube, Vimeo, or permitted HTTPS iframe domain).
+ * Returns null if the URL is unsafe, unpermitted, or malformed.
  */
+export function getSafeVideoEmbedUrl(rawUrl: unknown): string | null {
+  if (!rawUrl) return null;
+  const youtube = getSafeYouTubeEmbedUrl(rawUrl);
+  if (youtube && isAllowedIframeUrl(youtube)) return youtube;
+
+  const vimeo = getSafeVimeoEmbedUrl(rawUrl);
+  if (vimeo && isAllowedIframeUrl(vimeo)) return vimeo;
+
+  const sanitized = sanitizeUrl(rawUrl, { allowRelative: false });
+  if (sanitized && isAllowedIframeUrl(sanitized)) {
+    return sanitized;
+  }
+
+  return null;
+}
+
 export function isAllowedIframeUrl(rawUrl: unknown): boolean {
   const sanitized = sanitizeUrl(rawUrl, { allowRelative: false });
   if (!sanitized) return false;

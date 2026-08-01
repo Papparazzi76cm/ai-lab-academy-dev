@@ -78,9 +78,16 @@ export const lessonQuery = (courseSlug: string, lessonSlug: string) =>
     },
   });
 
-export const publishedLessonBlocksQuery = (lessonId: string | undefined) =>
+/**
+ * Fetches lesson blocks ordered by position for a given lesson.
+ * Access security is strictly enforced at the database layer via PostgreSQL RLS policies on public.lesson_blocks:
+ * - Anonymous users and non-enrolled students can ONLY read blocks of published free preview lessons.
+ * - Enrolled students (status = 'active') can read blocks of all lessons in their enrolled courses.
+ * - Course instructors (owners) and admins retain full read/write access.
+ */
+export const lessonBlocksQuery = (lessonId: string | undefined) =>
   queryOptions({
-    queryKey: ["published-blocks", lessonId],
+    queryKey: ["lesson-blocks", lessonId],
     enabled: Boolean(lessonId),
     queryFn: async () => {
       if (!lessonId) return [];
@@ -93,6 +100,10 @@ export const publishedLessonBlocksQuery = (lessonId: string | undefined) =>
       return data ?? [];
     },
   });
+
+// Alias for backwards compatibility
+export const publishedLessonBlocksQuery = lessonBlocksQuery;
+
 
 export const myProgressQuery = (userId: string | undefined, courseId: string | undefined) =>
   queryOptions({

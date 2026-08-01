@@ -186,7 +186,46 @@ BEGIN
 
   RAISE NOTICE '[PASS] SCENARIO 6: Admin full access verified.';
 
-  RAISE NOTICE '--- ALL 6 RLS SECURITY TEST SCENARIOS SUCCEEDED ---';
+  -- =========================================================================
+  -- SCENARIO 7: LESSON PROGRESS SECURITY & IMPERSONATION BLOCKS
+  -- =========================================================================
+  -- 7a. Authenticated student can upsert their own progress
+  PERFORM set_config('role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_enrolled_id, 'role', 'authenticated')::text, true);
+
+  INSERT INTO public.lesson_progress (user_id, course_id, lesson_id, completed, status)
+  VALUES (v_student_enrolled_id, v_course_owner_id, v_lesson_free_owner_id, true, 'completed'::progress_status)
+  ON CONFLICT (user_id, lesson_id) DO UPDATE SET completed = EXCLUDED.completed;
+
+  SELECT COUNT(*) INTO v_count FROM public.lesson_progress WHERE user_id = v_student_enrolled_id;
+  ASSERT v_count = 1, 'Student MUST be able to save their own lesson progress';
+
+  -- 7b. Student CANNOT insert/update progress on behalf of another user_id
+  INSERT INTO public.lesson_progress (user_id, course_id, lesson_id, completed, status)
+  VALUES (v_student_not_enrolled_id, v_course_owner_id, v_lesson_paid_owner_id, true, 'completed'::progress_status)
+  ON CONFLICT (user_id, lesson_id) DO NOTHING;
+
+  SELECT COUNT(*) INTO v_count FROM public.lesson_progress WHERE user_id = v_student_not_enrolled_id;
+  ASSERT v_count = 0, 'Student MUST NOT be able to create progress records for another user_id';
+
+  -- 7c. Student cannot read progress of other users
+  PERFORM set_config('role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_not_enrolled_id, 'role', 'authenticated')::text, true);
+
+  SELECT COUNT(*) INTO v_count FROM public.lesson_progress WHERE user_id = v_student_enrolled_id;
+  ASSERT v_count = 0, 'Student MUST NOT be able to read progress of another user';
+
+  -- 7d. Admin can read all student progress records
+  PERFORM set_config('role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id, 'role', 'authenticated')::text, true);
+
+  SELECT COUNT(*) INTO v_count FROM public.lesson_progress;
+  ASSERT v_count = 1, 'Admin MUST be able to query progress across all students';
+
+  RAISE NOTICE '[PASS] SCENARIO 7: Lesson progress security & RLS isolation verified.';
+
+  RAISE NOTICE '--- ALL 7 RLS SECURITY TEST SCENARIOS SUCCEEDED ---';
 END $$;
+
 
 ROLLBACK;
