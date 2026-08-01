@@ -1,7 +1,10 @@
 /**
- * Block types and schema definitions for AI Lab Academy's Notion/Gutenberg-style
- * block editor and renderer.
+ * Block types, Zod schemas, defaults, and validation helpers
+ * for AI Lab Academy's Notion/Gutenberg-style block editor and renderer.
  */
+
+import { z } from "zod";
+import { sanitizeUrl, getSafeYouTubeEmbedUrl, getSafeVimeoEmbedUrl } from "./url-security";
 
 export type BlockCategory = "texto" | "multimedia" | "codigo" | "recursos" | "educacion";
 
@@ -55,8 +58,9 @@ export interface LessonBlockItem {
   type: BlockType;
   content_json: Record<string, unknown>;
   settings_json: Record<string, unknown>;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+  validation_error?: string | undefined;
 }
 
 export interface CatalogItem {
@@ -262,6 +266,190 @@ export const blockCatalog: CatalogItem[] = [
   },
 ];
 
+// --- Zod Validation Schemas per BlockType ---
+
+const safeUrlSchema = z.string().refine((url) => !url || Boolean(sanitizeUrl(url)), {
+  message: "La URL contiene un protocolo no seguro o no es válida.",
+});
+
+const requiredSafeUrlSchema = z
+  .string()
+  .min(1, "La URL es requerida")
+  .refine((url) => Boolean(sanitizeUrl(url)), {
+    message: "La URL contiene un protocolo no seguro o no es válida.",
+  });
+
+const youtubeUrlSchema = z
+  .string()
+  .min(1, "La URL de YouTube es requerida")
+  .refine((url) => Boolean(getSafeYouTubeEmbedUrl(url)), {
+    message: "Debe ser una URL válida de YouTube.",
+  });
+
+const vimeoUrlSchema = z
+  .string()
+  .min(1, "La URL de Vimeo es requerida")
+  .refine((url) => Boolean(getSafeVimeoEmbedUrl(url)), {
+    message: "Debe ser una URL válida de Vimeo.",
+  });
+
+const textContentSchema = z.object({
+  text: z.string().min(1, "El texto no puede estar vacío"),
+});
+
+const listContentSchema = z.object({
+  items: z.array(z.string()).min(1, "La lista debe contener al menos un elemento"),
+});
+
+export const blockContentSchemas: Record<string, z.ZodSchema> = {
+  h1: textContentSchema,
+  h2: textContentSchema,
+  h3: textContentSchema,
+  heading: textContentSchema,
+  paragraph: textContentSchema,
+  text: textContentSchema,
+
+  bullet_list: listContentSchema,
+  numbered_list: listContentSchema,
+  list: listContentSchema,
+  checklist: listContentSchema,
+
+  quote: z.object({
+    text: z.string().min(1, "La cita no puede estar vacía"),
+    author: z.string().optional(),
+  }),
+
+  divider: z.object({}).passthrough(),
+
+  image: z.object({
+    url: safeUrlSchema,
+    alt: z.string().optional(),
+    caption: z.string().optional(),
+  }),
+
+  youtube: z.object({
+    url: youtubeUrlSchema,
+    title: z.string().optional(),
+  }),
+
+  vimeo: z.object({
+    url: vimeoUrlSchema,
+    title: z.string().optional(),
+  }),
+
+  video_file: z.object({
+    url: safeUrlSchema,
+    filename: z.string().optional(),
+  }),
+  video: z.object({
+    url: safeUrlSchema,
+    filename: z.string().optional(),
+  }),
+
+  audio: z.object({
+    url: safeUrlSchema,
+    title: z.string().optional(),
+  }),
+
+  gallery: z.object({
+    images: z.array(
+      z.object({
+        url: safeUrlSchema,
+        caption: z.string().optional(),
+      }),
+    ),
+  }),
+
+  code: z.object({
+    code: z.string().min(1, "El código no puede estar vacío"),
+    language: z.string().optional(),
+    title: z.string().optional(),
+  }),
+
+  download_button: z.object({
+    label: z.string().min(1, "La etiqueta del botón es requerida"),
+    url: safeUrlSchema,
+    filename: z.string().optional(),
+    size: z.string().optional(),
+  }),
+  button: z.object({
+    label: z.string().min(1, "La etiqueta es requerida"),
+    url: safeUrlSchema,
+  }),
+
+  external_link: z.object({
+    label: z.string().min(1, "El título del enlace es requerido"),
+    url: requiredSafeUrlSchema,
+    description: z.string().optional(),
+  }),
+
+  pdf_embed: z.object({
+    url: safeUrlSchema,
+    title: z.string().optional(),
+  }),
+  pdf: z.object({
+    url: safeUrlSchema,
+    title: z.string().optional(),
+  }),
+
+  objectives: listContentSchema,
+
+  summary: z.object({
+    title: z.string().optional(),
+    text: z.string().min(1, "El texto del resumen es requerido"),
+  }),
+
+  tip: z.object({
+    title: z.string().optional(),
+    text: z.string().min(1, "El texto del consejo es requerido"),
+  }),
+
+  warning: z.object({
+    title: z.string().optional(),
+    text: z.string().min(1, "El texto de advertencia es requerido"),
+  }),
+  callout: z.object({
+    title: z.string().optional(),
+    text: z.string().min(1, "El texto es requerido"),
+  }),
+
+  exercise: z.object({
+    title: z.string().optional(),
+    instructions: z.string().min(1, "Las instrucciones del ejercicio son requeridas"),
+    steps: z.array(z.string()).optional(),
+  }),
+
+  challenge: z.object({
+    title: z.string().optional(),
+    goal: z.string().min(1, "El objetivo del reto es requerido"),
+    hint: z.string().optional(),
+  }),
+
+  open_question: z
+    .object({
+      question: z.string().optional(),
+      prompt: z.string().optional(),
+      sampleAnswer: z.string().optional(),
+      answer: z.string().optional(),
+    })
+    .refine((data) => Boolean((data.question || data.prompt)?.trim()), {
+      message: "La pregunta de reflexión no puede estar vacía",
+      path: ["question"],
+    }),
+  question: z
+    .object({
+      question: z.string().optional(),
+      prompt: z.string().optional(),
+      sampleAnswer: z.string().optional(),
+      answer: z.string().optional(),
+    })
+    .refine((data) => Boolean((data.question || data.prompt)?.trim()), {
+      message: "La pregunta no puede estar vacía",
+      path: ["question"],
+    }),
+  quiz: z.object({}).passthrough(),
+};
+
 export function getDefaultBlockPayload(type: BlockType): {
   content_json: Record<string, unknown>;
   settings_json: Record<string, unknown>;
@@ -329,7 +517,7 @@ export function getDefaultBlockPayload(type: BlockType): {
       };
     case "vimeo":
       return {
-        content_json: { url: "", title: "Vídeo de Vimeo" },
+        content_json: { url: "https://vimeo.com/76979871", title: "Vídeo de Vimeo" },
         settings_json: { ...defaultSettings },
       };
     case "video_file":
@@ -444,14 +632,14 @@ export function getDefaultBlockPayload(type: BlockType): {
       };
     default:
       return {
-        content_json: { text: "" },
+        content_json: { text: "Nuevo contenido" },
         settings_json: { ...defaultSettings },
       };
   }
 }
 
 /**
- * Validates block content before persisting to database.
+ * Validates block content with Zod before persisting to database.
  */
 export function validateBlockContent(
   type: BlockType,
@@ -461,25 +649,18 @@ export function validateBlockContent(
     return { valid: false, error: "El contenido del bloque debe ser un objeto JSON válido." };
   }
 
-  // Heading and Paragraph validation
-  if (["h1", "h2", "h3", "paragraph", "text"].includes(type)) {
-    if (typeof content["text"] === "string" && (content["text"] as string).trim().length === 0) {
-      return { valid: false, error: "El texto del encabezado o párrafo no puede estar vacío." };
-    }
+  const schema = blockContentSchemas[type];
+  if (!schema) {
+    return { valid: true };
   }
 
-  // Code validation
-  if (type === "code") {
-    if (typeof content["code"] !== "string" || (content["code"] as string).trim().length === 0) {
-      return { valid: false, error: "El bloque de código debe contener código." };
-    }
-  }
-
-  // Lists validation
-  if (["bullet_list", "numbered_list", "list", "objectives"].includes(type)) {
-    if (!Array.isArray(content["items"])) {
-      return { valid: false, error: "La lista debe contener elementos." };
-    }
+  const result = schema.safeParse(content);
+  if (!result.success) {
+    const firstIssue = result.error.issues[0];
+    const msg = firstIssue
+      ? `${firstIssue.path.join(".")}: ${firstIssue.message}`
+      : "Contenido no válido.";
+    return { valid: false, error: msg };
   }
 
   return { valid: true };
@@ -494,16 +675,19 @@ export function parseBlocks(raw: unknown): LessonBlockItem[] {
     return raw.map((item, idx) => {
       if (item && typeof item === "object") {
         const type = ((item.type as string) || "paragraph") as BlockType;
+        const content_json = (item.content_json ||
+          item.content || { text: item.text || "" }) as Record<string, unknown>;
+        const settings_json = (item.settings_json || item.settings || {}) as Record<
+          string,
+          unknown
+        >;
         return {
           id: (item.id as string) || `legacy-${idx}`,
           lesson_id: (item.lesson_id as string) || "",
           position: typeof item.position === "number" ? item.position : idx,
           type,
-          content_json: (item.content_json || item.content || { text: item.text || "" }) as Record<
-            string,
-            unknown
-          >,
-          settings_json: (item.settings_json || item.settings || {}) as Record<string, unknown>,
+          content_json,
+          settings_json,
         };
       }
       return {

@@ -11,18 +11,31 @@ import { toast } from "sonner";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
+const MAX_HISTORY_LENGTH = 50;
+
 export function useLessonBlocks(lessonId: string) {
   const queryClient = useQueryClient();
   const [blocks, setBlocks] = useState<LessonBlockItem[]>([]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [expandedBlockIds, setExpandedBlockIds] = useState<Set<string>>(new Set());
 
-  // History stack for future undo / redo architecture
+  // History stack for undo / redo scoped to current lessonId
   const [history, setHistory] = useState<LessonBlockItem[][]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
   const pendingSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isInitialLoadRef = useRef<boolean>(true);
+  const pendingSaveBlocksRef = useRef<{ blocks: LessonBlockItem[]; lessonId: string } | null>(null);
+  const isDirtyRef = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
+  const currentLessonIdRef = useRef<string>(lessonId);
+
+  // Track mounted state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // 1. Fetch blocks from Supabase
   const queryKey = ["lesson-blocks", lessonId];
@@ -35,6 +48,7 @@ export function useLessonBlocks(lessonId: string) {
   } = useQuery({
     queryKey,
     queryFn: async () => {
+      if (!lessonId) return [];
       const { data, error } = await supabase
         .from("lesson_blocks")
         .select("*")
@@ -47,93 +61,160 @@ export function useLessonBlocks(lessonId: string) {
     enabled: Boolean(lessonId),
   });
 
-  // Sync query data to local state & initial history stack
+  // Reset state when lessonId changes
+  useEffect(() => {
+    if (currentLessonIdRef.current !== lessonId) {
+      // Flush any pending save for old lesson
+      if (pendingSaveBlocksRef.current && pendingSaveTimeoutRef.current) {
+        clearTimeout(pendingSaveTimeoutRef.current);
+        const { blocks: oldBlocks, lessonId: oldLessonId } = pendingSaveBlocksRef.current;
+        void saveBlocksToSupabase(oldBlocks, oldLessonId);
+        pendingSaveBlocksRef.current = null;
+      }
+
+      currentLessonIdRef.current = lessonId;
+      isDirtyRef.current = false;
+      setHistory([]);
+      setHistoryIndex(-1);
+      setBlocks([]);
+    }
+  }, [lessonId]);
+
+  // Sync query data to local state WITHOUT overwriting active local edits or server responses to history
   useEffect(() => {
     if (fetchedBlocks) {
-      setBlocks(fetchedBlocks);
-      const allIds = new Set(fetchedBlocks.map((b) => b.id));
-      setExpandedBlockIds(allIds);
-      if (isInitialLoadRef.current) {
-        setHistory([fetchedBlocks]);
-        setHistoryIndex(0);
-        isInitialLoadRef.current = false;
+      // If user has local dirty edits pending, do not let stale server response overwrite them
+      if (isDirtyRef.current && pendingSaveBlocksRef.current) {
+        return;
       }
+
+      // Validate fetched blocks
+      const validated = fetchedBlocks.map((b) => {
+        const check = validateBlockContent(b.type, b.content_json);
+        return {
+          ...b,
+          validation_error: check.valid ? undefined : check.error,
+        };
+      });
+
+      setBlocks(validated);
+      const allIds = new Set(validated.map((b) => b.id));
+      setExpandedBlockIds(allIds);
+
+      // Only set initial history if empty
+      setHistory((prev) => (prev.length === 0 ? [validated] : prev));
+      setHistoryIndex((prev) => (prev === -1 ? 0 : prev));
     }
   }, [fetchedBlocks]);
 
-  // Helper to push state snapshot into history stack
+  // Helper to push user actions to history stack (max 50)
   const pushHistory = useCallback(
     (newBlocks: LessonBlockItem[]) => {
       setHistory((prev) => {
-        const sliced = prev.slice(0, historyIndex + 1);
-        return [...sliced, newBlocks];
+        const sliced = historyIndex >= 0 ? prev.slice(0, historyIndex + 1) : [];
+        const updated = [...sliced, newBlocks];
+        return updated.slice(-MAX_HISTORY_LENGTH);
       });
-      setHistoryIndex((prev) => prev + 1);
+      setHistoryIndex((prev) => Math.min(prev + 1, MAX_HISTORY_LENGTH - 1));
     },
     [historyIndex],
   );
 
-  // 2. Autosave mutation (debounced)
-  const saveMutation = useMutation({
-    mutationFn: async (blocksToSave: LessonBlockItem[]) => {
-      // Validate all blocks before saving
-      for (const b of blocksToSave) {
-        const check = validateBlockContent(b.type, b.content_json);
-        if (!check.valid) {
-          throw new Error(`Bloque "${b.type}": ${check.error}`);
-        }
-      }
+  // Core save function
+  const saveBlocksToSupabase = async (blocksToSave: LessonBlockItem[], targetLessonId: string) => {
+    if (!targetLessonId) return false;
 
-      // Upsert blocks in batch
-      const payload = blocksToSave.map((b, idx) => ({
-        id: b.id,
-        lesson_id: lessonId,
-        position: idx,
-        type: b.type,
-        content_json: b.content_json as unknown as import("@/integrations/supabase/types").Json,
-        settings_json: b.settings_json as unknown as import("@/integrations/supabase/types").Json,
-      }));
+    // Filter valid blocks to save, skip saving blocks with validation errors
+    const validBlocks = blocksToSave.filter((b) => {
+      const check = validateBlockContent(b.type, b.content_json);
+      return check.valid;
+    });
 
+    if (validBlocks.length === 0 && blocksToSave.length > 0) {
+      if (isMountedRef.current) setSaveStatus("error");
+      return false;
+    }
+
+    const payload = validBlocks.map((b, idx) => ({
+      id: b.id,
+      lesson_id: targetLessonId,
+      position: idx,
+      type: b.type,
+      content_json: b.content_json as unknown as import("@/integrations/supabase/types").Json,
+      settings_json: b.settings_json as unknown as import("@/integrations/supabase/types").Json,
+    }));
+
+    try {
+      if (isMountedRef.current) setSaveStatus("saving");
       const { error } = await supabase.from("lesson_blocks").upsert(payload, { onConflict: "id" });
       if (error) throw error;
 
+      if (isMountedRef.current) {
+        setSaveStatus("saved");
+        isDirtyRef.current = false;
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            setSaveStatus((current) => (current === "saved" ? "idle" : current));
+          }
+        }, 1500);
+      }
       return true;
-    },
-    onMutate: () => {
-      setSaveStatus("saving");
-    },
-    onSuccess: () => {
-      setSaveStatus("saved");
-      void queryClient.invalidateQueries({ queryKey });
-      setTimeout(() => {
-        setSaveStatus((current) => (current === "saved" ? "idle" : current));
-      }, 2000);
-    },
-    onError: (err: Error) => {
-      setSaveStatus("error");
-      toast.error(`Error al autoguardar: ${err.message}`);
-    },
-  });
+    } catch (err: unknown) {
+      if (isMountedRef.current) {
+        setSaveStatus("error");
+        const msg = err instanceof Error ? err.message : "Error al guardar";
+        toast.error(`Error al autoguardar: ${msg}`);
+      }
+      return false;
+    }
+  };
 
-  // Debounced save trigger
+  // Immediate Flush function for pending saves
+  const flushPendingSave = useCallback(async () => {
+    if (pendingSaveTimeoutRef.current) {
+      clearTimeout(pendingSaveTimeoutRef.current);
+      pendingSaveTimeoutRef.current = null;
+    }
+    if (pendingSaveBlocksRef.current) {
+      const { blocks: blocksToSave, lessonId: targetLessonId } = pendingSaveBlocksRef.current;
+      pendingSaveBlocksRef.current = null;
+      await saveBlocksToSupabase(blocksToSave, targetLessonId);
+    }
+  }, []);
+
+  // Debounced save scheduler (~1 second)
   const scheduleAutosave = useCallback(
     (newBlocks: LessonBlockItem[]) => {
+      isDirtyRef.current = true;
+      pendingSaveBlocksRef.current = { blocks: newBlocks, lessonId };
+
       if (pendingSaveTimeoutRef.current) {
         clearTimeout(pendingSaveTimeoutRef.current);
       }
-      setSaveStatus("saving");
+
+      if (isMountedRef.current) setSaveStatus("saving");
+
       pendingSaveTimeoutRef.current = setTimeout(() => {
-        saveMutation.mutate(newBlocks);
-      }, 1000); // ~1 second debounce
+        if (pendingSaveBlocksRef.current) {
+          const { blocks: blocksToSave, lessonId: targetLessonId } = pendingSaveBlocksRef.current;
+          pendingSaveBlocksRef.current = null;
+          void saveBlocksToSupabase(blocksToSave, targetLessonId);
+        }
+      }, 1000);
     },
-    [saveMutation],
+    [lessonId],
   );
 
-  // Clean up timer on unmount
+  // Clean up and flush pending save on unmount
   useEffect(() => {
     return () => {
       if (pendingSaveTimeoutRef.current) {
         clearTimeout(pendingSaveTimeoutRef.current);
+      }
+      if (pendingSaveBlocksRef.current) {
+        const { blocks: blocksToSave, lessonId: targetLessonId } = pendingSaveBlocksRef.current;
+        pendingSaveBlocksRef.current = null;
+        void saveBlocksToSupabase(blocksToSave, targetLessonId);
       }
     };
   }, []);
@@ -156,15 +237,11 @@ export function useLessonBlocks(lessonId: string) {
 
       const updated = [...blocks];
       updated.splice(insertAt, 0, newBlock);
-
-      // Re-index positions
       const reindexed = updated.map((b, idx) => ({ ...b, position: idx }));
 
       setBlocks(reindexed);
       setExpandedBlockIds((prev) => new Set([...prev, newId]));
       pushHistory(reindexed);
-
-      // Save directly
       scheduleAutosave(reindexed);
     },
     [blocks, lessonId, pushHistory, scheduleAutosave],
@@ -179,14 +256,21 @@ export function useLessonBlocks(lessonId: string) {
       setBlocks((prev) => {
         const next = prev.map((b) => {
           if (b.id !== id) return b;
+          const updatedContent = { ...b.content_json, ...content_json };
+          const updatedSettings = settings_json
+            ? { ...b.settings_json, ...settings_json }
+            : b.settings_json;
+
+          const check = validateBlockContent(b.type, updatedContent);
+
           return {
             ...b,
-            content_json: { ...b.content_json, ...content_json },
-            settings_json: settings_json
-              ? { ...b.settings_json, ...settings_json }
-              : b.settings_json,
+            content_json: updatedContent,
+            settings_json: updatedSettings,
+            validation_error: check.valid ? undefined : check.error,
           };
         });
+
         scheduleAutosave(next);
         return next;
       });
@@ -233,7 +317,6 @@ export function useLessonBlocks(lessonId: string) {
       setBlocks(reindexed);
       pushHistory(reindexed);
 
-      // Delete from DB immediately and schedule autosave for remaining
       const { error } = await supabase.from("lesson_blocks").delete().eq("id", id);
       if (error) {
         toast.error("No se pudo eliminar el bloque");
@@ -262,7 +345,6 @@ export function useLessonBlocks(lessonId: string) {
       setBlocks(nextBlocks);
       pushHistory(nextBlocks);
 
-      // Persist via atomic RPC
       setSaveStatus("saving");
       try {
         const payload = nextBlocks.map((b) => ({ id: b.id, position: b.position }));
@@ -273,10 +355,14 @@ export function useLessonBlocks(lessonId: string) {
 
         if (error) throw error;
         setSaveStatus("saved");
-        setTimeout(() => setSaveStatus("idle"), 1500);
-      } catch (err) {
-        setSaveStatus("error");
-        toast.error("Error al reordenar los bloques");
+        setTimeout(() => {
+          if (isMountedRef.current) setSaveStatus("idle");
+        }, 1500);
+      } catch {
+        if (isMountedRef.current) {
+          setSaveStatus("error");
+          toast.error("Error al reordenar los bloques");
+        }
       }
     },
     [blocks, lessonId, pushHistory],
@@ -302,7 +388,7 @@ export function useLessonBlocks(lessonId: string) {
     setExpandedBlockIds(new Set());
   }, []);
 
-  // Future Undo / Redo helpers
+  // Undo / Redo
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
 
@@ -347,5 +433,6 @@ export function useLessonBlocks(lessonId: string) {
     undo,
     redo,
     refetch,
+    flushPendingSave,
   };
 }
