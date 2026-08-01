@@ -666,6 +666,62 @@ export function validateBlockContent(
   return { valid: true };
 }
 
+export const blockSettingsSchema = z
+  .object({
+    collapsed: z.boolean().optional(),
+    align: z.enum(["left", "center", "right"]).optional(),
+    ordered: z.boolean().optional(),
+    aspectRatio: z.string().optional(),
+    autoPlay: z.boolean().optional(),
+    showLineNumbers: z.union([z.boolean(), z.string()]).optional(),
+    columns: z.number().optional(),
+    height: z.string().optional(),
+  })
+  .passthrough();
+
+export function validateBlockSettings(settings: Record<string, unknown>): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!settings || typeof settings !== "object") {
+    return { valid: false, error: "La configuración del bloque debe ser un objeto JSON válido." };
+  }
+
+  const result = blockSettingsSchema.safeParse(settings);
+  if (!result.success) {
+    const firstIssue = result.error.issues[0];
+    const msg = firstIssue
+      ? `Configuración (${firstIssue.path.join(".")}): ${firstIssue.message}`
+      : "Configuración de bloque no válida.";
+    return { valid: false, error: msg };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Centralized validation for both content_json and settings_json.
+ */
+export function validateBlock(
+  type: BlockType,
+  content: Record<string, unknown>,
+  settings?: Record<string, unknown>,
+): { valid: boolean; error?: string } {
+  const contentResult = validateBlockContent(type, content);
+  if (!contentResult.valid) {
+    return contentResult;
+  }
+
+  if (settings) {
+    const settingsResult = validateBlockSettings(settings);
+    if (!settingsResult.valid) {
+      return settingsResult;
+    }
+  }
+
+  return { valid: true };
+}
+
 /**
  * Parses raw JSON or legacy contents into LessonBlockItem array.
  */

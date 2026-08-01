@@ -1,13 +1,27 @@
 import { useState, useCallback } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { BlockToolbar } from "./BlockToolbar";
-import { BlockItemEditor } from "./BlockItemEditor";
+import { SortableBlockItem } from "./SortableBlockItem";
 import { BlockSelector } from "./BlockSelector";
 import { BlockPreview } from "./BlockPreview";
 import { useLessonBlocks } from "./useLessonBlocks";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
 import type { BlockType } from "@/lib/blocks";
-import { cn } from "@/lib/utils";
 
 export function BlockEditor({ lessonId }: { lessonId: string }) {
   const {
@@ -28,15 +42,45 @@ export function BlockEditor({ lessonId }: { lessonId: string }) {
     collapseAll,
     undo,
     redo,
+    flushPendingSave,
   } = useLessonBlocks(lessonId);
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [insertTargetIndex, setInsertTargetIndex] = useState<number | undefined>(undefined);
 
-  // Drag & drop state for reordering
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  // Configure dnd-kit sensors (Pointer, Touch, Keyboard with sortableKeyboardCoordinates)
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleModeChange = useCallback(
+    async (newMode: "edit" | "preview") => {
+      if (newMode === "preview") {
+        const ok = await flushPendingSave();
+        if (!ok) {
+          return;
+        }
+        setMode("preview");
+      } else {
+        setMode("edit");
+      }
+    },
+    [flushPendingSave],
+  );
 
   const handleOpenSelectorAt = useCallback((index?: number) => {
     setInsertTargetIndex(index);
@@ -50,25 +94,63 @@ export function BlockEditor({ lessonId }: { lessonId: string }) {
     [addBlock, insertTargetIndex],
   );
 
-  const handleDropOn = useCallback(
-    (targetId: string) => {
-      setOverId(null);
-      if (!dragId || dragId === targetId) return;
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
 
       const ids = blocks.map((b) => b.id);
-      const from = ids.indexOf(dragId);
-      const to = ids.indexOf(targetId);
-      if (from < 0 || to < 0) return;
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
 
-      const [moved] = ids.splice(from, 1);
+      if (oldIndex < 0 || newIndex < 0) return;
+
+      const newIds = [...ids];
+      const [moved] = newIds.splice(oldIndex, 1);
       if (moved) {
-        ids.splice(to, 0, moved);
-        reorderBlocks(ids);
+        newIds.splice(newIndex, 0, moved);
+        reorderBlocks(newIds);
       }
-      setDragId(null);
     },
-    [blocks, dragId, reorderBlocks],
+    [blocks, reorderBlocks],
   );
+
+  // Screen reader accessibility announcements
+  const accessibilityAnnouncements = {
+    onDragStart({ active }: { active: { id: string | number } }) {
+      const index = blocks.findIndex((b) => b.id === active.id);
+      return `Arrastrando bloque en posición ${index + 1} de ${blocks.length}`;
+    },
+    onDragOver({
+      active,
+      over,
+    }: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) {
+      if (over) {
+        const overIndex = blocks.findIndex((b) => b.id === over.id);
+        return `Moviendo sobre la posición ${overIndex + 1}`;
+      }
+      return undefined;
+    },
+    onDragEnd({
+      active,
+      over,
+    }: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) {
+      if (over) {
+        const overIndex = blocks.findIndex((b) => b.id === over.id);
+        return `Bloque soltado en posición ${overIndex + 1} de ${blocks.length}`;
+      }
+      return "Arrastre cancelado";
+    },
+    onDragCancel() {
+      return "Arrastre de bloque cancelado";
+    },
+  };
 
   if (isLoading) {
     return (
@@ -87,12 +169,14 @@ export function BlockEditor({ lessonId }: { lessonId: string }) {
     );
   }
 
+  const blockIds = blocks.map((b) => b.id);
+
   return (
     <div className="space-y-6">
       {/* Top Toolbar */}
       <BlockToolbar
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={handleModeChange}
         saveStatus={saveStatus}
         onAddBlock={() => handleOpenSelectorAt(blocks.length)}
         onExpandAll={expandAll}
@@ -124,80 +208,71 @@ export function BlockEditor({ lessonId }: { lessonId: string }) {
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {/* Insert trigger above first block */}
-              <InsertDivider onInsert={() => handleOpenSelectorAt(0)} />
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              accessibility={{ announcements: accessibilityAnnouncements }}
+            >
+              <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {/* Insert trigger above first block */}
+                  <InsertDivider onInsert={() => handleOpenSelectorAt(0)} />
 
-              {blocks.map((block, idx) => {
-                const isExpanded = expandedBlockIds.has(block.id);
-                const isFirst = idx === 0;
-                const isLast = idx === blocks.length - 1;
+                  {blocks.map((block, idx) => {
+                    const isExpanded = expandedBlockIds.has(block.id);
+                    const isFirst = idx === 0;
+                    const isLast = idx === blocks.length - 1;
 
-                return (
-                  <div key={block.id} className="space-y-2">
-                    <div
-                      draggable
-                      onDragStart={() => setDragId(block.id)}
-                      onDragEnd={() => {
-                        setDragId(null);
-                        setOverId(null);
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setOverId(block.id);
-                      }}
-                      onDrop={() => handleDropOn(block.id)}
-                      className={cn(
-                        "transition-all",
-                        dragId === block.id && "opacity-40",
-                        overId === block.id &&
-                          dragId !== block.id &&
-                          "ring-2 ring-primary/60 rounded-xl",
-                      )}
-                    >
-                      <BlockItemEditor
-                        block={block}
-                        isExpanded={isExpanded}
-                        onToggleExpand={() => toggleCollapse(block.id)}
-                        onChangeContent={(content) => updateBlockContent(block.id, content)}
-                        onChangeSettings={(settings) => updateBlockContent(block.id, {}, settings)}
-                        onDuplicate={() => duplicateBlock(block.id)}
-                        onDelete={() => deleteBlock(block.id)}
-                        onMoveUp={() => {
-                          if (idx > 0) {
-                            const ids = blocks.map((b) => b.id);
-                            const curr = ids[idx];
-                            const prev = ids[idx - 1];
-                            if (curr && prev) {
-                              ids[idx] = prev;
-                              ids[idx - 1] = curr;
-                              reorderBlocks(ids);
-                            }
+                    return (
+                      <div key={block.id} className="space-y-2">
+                        <SortableBlockItem
+                          id={block.id}
+                          block={block}
+                          isExpanded={isExpanded}
+                          onToggleExpand={() => toggleCollapse(block.id)}
+                          onChangeContent={(content) => updateBlockContent(block.id, content)}
+                          onChangeSettings={(settings) =>
+                            updateBlockContent(block.id, {}, settings)
                           }
-                        }}
-                        onMoveDown={() => {
-                          if (idx < blocks.length - 1) {
-                            const ids = blocks.map((b) => b.id);
-                            const curr = ids[idx];
-                            const next = ids[idx + 1];
-                            if (curr && next) {
-                              ids[idx] = next;
-                              ids[idx + 1] = curr;
-                              reorderBlocks(ids);
+                          onDuplicate={() => duplicateBlock(block.id)}
+                          onDelete={() => deleteBlock(block.id)}
+                          onMoveUp={() => {
+                            if (idx > 0) {
+                              const ids = blocks.map((b) => b.id);
+                              const curr = ids[idx];
+                              const prev = ids[idx - 1];
+                              if (curr && prev) {
+                                ids[idx] = prev;
+                                ids[idx - 1] = curr;
+                                reorderBlocks(ids);
+                              }
                             }
-                          }
-                        }}
-                        isFirst={isFirst}
-                        isLast={isLast}
-                      />
-                    </div>
+                          }}
+                          onMoveDown={() => {
+                            if (idx < blocks.length - 1) {
+                              const ids = blocks.map((b) => b.id);
+                              const curr = ids[idx];
+                              const next = ids[idx + 1];
+                              if (curr && next) {
+                                ids[idx] = next;
+                                ids[idx + 1] = curr;
+                                reorderBlocks(ids);
+                              }
+                            }
+                          }}
+                          isFirst={isFirst}
+                          isLast={isLast}
+                        />
 
-                    {/* Hover insert divider between blocks */}
-                    <InsertDivider onInsert={() => handleOpenSelectorAt(idx + 1)} />
-                  </div>
-                );
-              })}
-            </div>
+                        {/* Hover insert divider between blocks */}
+                        <InsertDivider onInsert={() => handleOpenSelectorAt(idx + 1)} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       )}
