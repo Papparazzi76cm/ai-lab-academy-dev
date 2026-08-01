@@ -55,6 +55,7 @@ USING (
       )
     )
     AND e.user_id = auth.uid()
+    AND e.status = 'active'::enrollment_status
   )
   -- Or user is the course instructor
   OR (resources.course_id IS NOT NULL AND private.is_course_instructor(resources.course_id, auth.uid()))

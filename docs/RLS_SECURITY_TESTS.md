@@ -13,7 +13,7 @@ This document details the Row Level Security (RLS) policies, PostgreSQL triggers
 
 - **`student` (Authenticated User)**:
   - Can read published course catalog.
-  - Can read resources of courses where they have an active enrollment (`public.enrollments`), plus public resources of free lessons.
+  - Can read resources of courses where they have an active enrollment (`public.enrollments` with `status = 'active'::enrollment_status`), plus public resources of free lessons.
   - Cannot access `/admin/*` routes.
   - Blocked by RLS policies from creating/editing courses, modules, lessons, resources, categories, or instructors.
 
@@ -40,7 +40,7 @@ This document details the Row Level Security (RLS) policies, PostgreSQL triggers
 2. **Anon Policy**:
    - `SELECT` allowed ONLY IF `is_public = true` AND lesson is published (`status = 'published'`) and free preview (`is_free_preview = true`) in a published course.
 3. **Student Policy**:
-   - `SELECT` allowed IF enrolled in the course OR resource is public free preview.
+   - `SELECT` allowed IF active enrollment in the course (`e.status = 'active'::enrollment_status`) OR resource is public free preview (`is_public = true` in published free lesson). Cancelled enrollments (`status = 'cancelled'`) do NOT grant access to private resources.
 4. **Instructor Policy**:
    - `SELECT`, `INSERT`, `UPDATE`, `DELETE` allowed ONLY for courses owned by the instructor (`private.is_course_instructor(...)`).
 5. **Admin Policy**:
@@ -95,7 +95,8 @@ The script runs inside a transaction block (`BEGIN ... ROLLBACK`) and tests all 
 
 1. **Anon**: Verifies access to public free preview resources only.
 2. **Student (not enrolled)**: Verifies denial of paid/private course resources.
-3. **Student (enrolled)**: Verifies full access to resources of enrolled courses.
-4. **Instructor (owner)**: Verifies read/update access to resources of owned courses.
-5. **Instructor (non-owner)**: Verifies access denial to resources of other instructors' courses.
-6. **Admin**: Verifies global read/update access across all resources.
+3. **Student (active enrollment)**: Verifies full access to resources of enrolled course with `status = 'active'::enrollment_status`.
+4. **Student (cancelled enrollment)**: Verifies restriction to public free preview resources when `status = 'cancelled'::enrollment_status`.
+5. **Instructor (owner)**: Verifies read/update access to resources of owned courses.
+6. **Instructor (non-owner)**: Verifies access denial to resources of other instructors' courses.
+7. **Admin**: Verifies global read/update access across all resources.

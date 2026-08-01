@@ -13,6 +13,7 @@ DECLARE
   v_instructor_owner_id UUID := gen_random_uuid();
   v_instructor_other_id UUID := gen_random_uuid();
   v_student_enrolled_id UUID := gen_random_uuid();
+  v_student_cancelled_id UUID := gen_random_uuid();
   v_student_not_enrolled_id UUID := gen_random_uuid();
 
   v_inst_owner_rec_id UUID := gen_random_uuid();
@@ -39,6 +40,7 @@ BEGIN
     (v_instructor_owner_id, 'inst.owner@ailabacademy.com'),
     (v_instructor_other_id, 'inst.other@ailabacademy.com'),
     (v_student_enrolled_id, 'student.enrolled@ailabacademy.com'),
+    (v_student_cancelled_id, 'student.cancelled@ailabacademy.com'),
     (v_student_not_enrolled_id, 'student.notenrolled@ailabacademy.com');
 
   -- 2. Assign user roles
@@ -47,6 +49,7 @@ BEGIN
     (v_instructor_owner_id, 'instructor'::app_role),
     (v_instructor_other_id, 'instructor'::app_role),
     (v_student_enrolled_id, 'student'::app_role),
+    (v_student_cancelled_id, 'student'::app_role),
     (v_student_not_enrolled_id, 'student'::app_role);
 
   -- 3. Create instructor records
@@ -73,9 +76,10 @@ BEGIN
     (v_res_private_free_id, v_course_owner_id, v_lesson_free_owner_id, 'Private Free Resource', 'https://example.com/priv-free.pdf', false),
     (v_res_paid_id, v_course_owner_id, v_lesson_paid_owner_id, 'Paid Lesson Resource', 'https://example.com/paid.pdf', false);
 
-  -- 7. Enroll student_enrolled in v_course_owner_id
-  INSERT INTO public.enrollments (user_id, course_id) VALUES
-    (v_student_enrolled_id, v_course_owner_id);
+  -- 7. Enroll active student and cancelled student in v_course_owner_id
+  INSERT INTO public.enrollments (user_id, course_id, status) VALUES
+    (v_student_enrolled_id, v_course_owner_id, 'active'::enrollment_status),
+    (v_student_cancelled_id, v_course_owner_id, 'cancelled'::enrollment_status);
 
   RAISE NOTICE '--- FIXTURES READY. EXECUTING SCENARIO TESTS ---';
 
@@ -110,15 +114,29 @@ BEGIN
   RAISE NOTICE '[PASS] SCENARIO 2: Student (not enrolled) restrictions verified.';
 
   -- =========================================================================
-  -- SCENARIO 3: STUDENT ENROLLED
+  -- SCENARIO 3: STUDENT ACTIVE ENROLLED
   -- =========================================================================
   PERFORM set_config('role', 'authenticated', true);
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_enrolled_id, 'role', 'authenticated')::text, true);
 
   SELECT COUNT(*) INTO v_count FROM public.resources WHERE course_id = v_course_owner_id;
-  ASSERT v_count = 3, 'Enrolled student MUST see all 3 resources of enrolled course. Found: ' || v_count;
+  ASSERT v_count = 3, 'Active enrolled student MUST see all 3 resources of enrolled course. Found: ' || v_count;
 
-  RAISE NOTICE '[PASS] SCENARIO 3: Student (enrolled) access verified.';
+  RAISE NOTICE '[PASS] SCENARIO 3: Student (active enrollment) access verified.';
+
+  -- =========================================================================
+  -- SCENARIO 3B: STUDENT CANCELLED ENROLLED
+  -- =========================================================================
+  PERFORM set_config('role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_student_cancelled_id, 'role', 'authenticated')::text, true);
+
+  SELECT COUNT(*) INTO v_count FROM public.resources WHERE course_id = v_course_owner_id;
+  ASSERT v_count = 1, 'Cancelled enrollment student should ONLY see public preview resource (count=1). Found: ' || v_count;
+
+  SELECT COUNT(*) INTO v_count FROM public.resources WHERE id = v_res_paid_id;
+  ASSERT v_count = 0, 'Cancelled enrollment student MUST NOT see paid lesson resource';
+
+  RAISE NOTICE '[PASS] SCENARIO 3B: Student (cancelled enrollment) restriction verified.';
 
   -- =========================================================================
   -- SCENARIO 4: INSTRUCTOR OWNER
