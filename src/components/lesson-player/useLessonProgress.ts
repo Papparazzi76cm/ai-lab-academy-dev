@@ -5,16 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
 export type LessonProgressStatus = "not_started" | "in_progress" | "completed";
 
 interface UseLessonProgressParams {
-  userId?: string;
-  courseId?: string;
+  userId?: string | undefined;
+  courseId?: string | undefined;
   courseSlug: string;
-  serverProgress?: Array<{
-    lesson_id: string;
-    completed?: boolean | null;
-    status?: string | null;
-  }>;
-  isServerProgressLoading?: boolean;
-  isServerProgressError?: boolean;
+  serverProgress?:
+    | Array<{
+        lesson_id: string;
+        completed?: boolean | null;
+        status?: string | null;
+      }>
+    | undefined;
+  isServerProgressLoading?: boolean | undefined;
+  isServerProgressError?: boolean | undefined;
 }
 
 /**
@@ -34,12 +36,14 @@ export function useLessonProgress({
 
   const [statuses, setStatuses] = useState<Record<string, LessonProgressStatus>>({});
 
-  // Track last mutation sequence number to prevent stale async responses from overwriting recent user actions
+  // Track last mutation sequence number and identity version to prevent stale async responses from overwriting recent user actions
+  const identityVersionRef = useRef<number>(0);
   const lastSeqRef = useRef<number>(0);
 
-  // Reset sequence tracking on user or course identity change
+  // Increment identity version and invalidate pending mutations on user or course identity change
   useEffect(() => {
-    lastSeqRef.current = 0;
+    identityVersionRef.current += 1;
+    lastSeqRef.current += 1;
   }, [userId, courseId]);
 
   // Reconcile server progress with local storage fallback
@@ -117,6 +121,9 @@ export function useLessonProgress({
     async (lessonId: string): Promise<boolean> => {
       const triggerUserId = userId;
       const triggerCourseId = courseId;
+      const triggerStorageKey = storageKey;
+      const mutationIdentityVersion = identityVersionRef.current;
+      const mutationSeq = ++lastSeqRef.current;
 
       const currentStatus = statuses[lessonId] || "not_started";
       const isCurrentlyCompleted = currentStatus === "completed";
@@ -126,13 +133,10 @@ export function useLessonProgress({
       const previousStatuses = { ...statuses };
       const updatedStatuses = { ...statuses, [lessonId]: nextStatus };
 
-      // Sequence check
-      const currentSeq = ++lastSeqRef.current;
-
       // Optimistic update
       setStatuses(updatedStatuses);
       try {
-        localStorage.setItem(storageKey, JSON.stringify(updatedStatuses));
+        localStorage.setItem(triggerStorageKey, JSON.stringify(updatedStatuses));
       } catch {
         // Ignore
       }
@@ -151,30 +155,35 @@ export function useLessonProgress({
           { onConflict: "user_id,lesson_id" },
         );
 
-        // If a newer request was made or identity changed while in flight, ignore response
+        // Check if identity or sequence changed while request was in flight
         if (
-          currentSeq !== lastSeqRef.current ||
-          userId !== triggerUserId ||
-          courseId !== triggerCourseId
+          mutationIdentityVersion !== identityVersionRef.current ||
+          mutationSeq !== lastSeqRef.current
         ) {
           return true;
         }
 
         if (error) {
-          // Revert optimistic update only if context still matches
-          if (userId === triggerUserId && courseId === triggerCourseId) {
-            setStatuses(previousStatuses);
-            try {
-              localStorage.setItem(storageKey, JSON.stringify(previousStatuses));
-            } catch {
-              // Ignore
-            }
+          // Revert optimistic update
+          setStatuses(previousStatuses);
+          try {
+            localStorage.setItem(triggerStorageKey, JSON.stringify(previousStatuses));
+          } catch {
+            // Ignore
           }
           toast.error(
             "No se pudo guardar el progreso en el servidor. Se ha restaurado el estado anterior.",
           );
           return false;
         }
+      }
+
+      // Check if identity or sequence changed while request was in flight
+      if (
+        mutationIdentityVersion !== identityVersionRef.current ||
+        mutationSeq !== lastSeqRef.current
+      ) {
+        return true;
       }
 
       if (nextCompleted) {

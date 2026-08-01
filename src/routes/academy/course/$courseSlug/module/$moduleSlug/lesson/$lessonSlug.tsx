@@ -135,8 +135,8 @@ function LessonPlayerPage() {
             <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
               <LessonNavigation
                 courseSlug={course.slug}
-                prevLesson={prevLesson}
-                nextLesson={nextLesson}
+                prevLesson={prevLesson ?? null}
+                nextLesson={nextLesson ?? null}
               />
 
               <LessonCompletionButton

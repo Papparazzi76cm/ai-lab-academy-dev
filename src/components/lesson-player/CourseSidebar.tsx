@@ -17,13 +17,13 @@ export type CourseWithModules = Tables<"courses"> & {
 
 interface CourseSidebarProps {
   course: CourseWithModules;
-  activeLessonId?: string;
-  activeModuleSlug?: string;
+  activeLessonId?: string | undefined;
+  activeModuleSlug?: string | undefined;
   statuses: Record<string, LessonProgressStatus>;
   completedCount: number;
   totalCount: number;
   progressPercent: number;
-  onSelectLesson?: () => void;
+  onSelectLesson?: (() => void) | undefined;
 }
 
 export function CourseSidebar({
