@@ -7,10 +7,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 let upsertResolverMap: Record<string, (val: { error: unknown }) => void> = {};
+let activeUserId = "user-A";
 
 vi.mock("@/integrations/supabase/client", () => {
   return {
     supabase: {
+      rpc: vi.fn((_fn, _params) => {
+        return new Promise((resolve) => {
+          upsertResolverMap[activeUserId] = resolve;
+        });
+      }),
       from: vi.fn(() => ({
         upsert: vi.fn((payload: { user_id: string; lesson_id: string; course_id: string }) => {
           return new Promise((resolve) => {
@@ -74,6 +80,7 @@ describe("useLessonProgress Concurrency & Identity Isolation", () => {
     };
 
     act(() => {
+      activeUserId = "user-B";
       rerender(currentProps);
     });
 

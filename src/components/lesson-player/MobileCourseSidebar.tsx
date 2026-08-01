@@ -14,6 +14,7 @@ interface MobileCourseSidebarProps {
   totalCount: number;
   progressPercent: number;
   currentIndex: number;
+  isEnrolled?: boolean;
 }
 
 export function MobileCourseSidebar({
@@ -25,6 +26,7 @@ export function MobileCourseSidebar({
   totalCount,
   progressPercent,
   currentIndex,
+  isEnrolled = false,
 }: MobileCourseSidebarProps) {
   const [open, setOpen] = useState(false);
 
@@ -50,6 +52,7 @@ export function MobileCourseSidebar({
               completedCount={completedCount}
               totalCount={totalCount}
               progressPercent={progressPercent}
+              isEnrolled={isEnrolled}
               onSelectLesson={() => setOpen(false)}
             />
           </SheetContent>

@@ -104,7 +104,6 @@ export const lessonBlocksQuery = (lessonId: string | undefined) =>
 // Alias for backwards compatibility
 export const publishedLessonBlocksQuery = lessonBlocksQuery;
 
-
 export const myProgressQuery = (userId: string | undefined, courseId: string | undefined) =>
   queryOptions({
     queryKey: ["progress", userId, courseId],
@@ -132,6 +131,26 @@ export const myEnrollmentsQuery = (userId: string | undefined) =>
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
+    },
+  });
+
+export const myEnrollmentForCourseQuery = (
+  userId: string | undefined,
+  courseId: string | undefined,
+) =>
+  queryOptions({
+    queryKey: ["enrollment", userId, courseId],
+    enabled: Boolean(userId && courseId),
+    queryFn: async () => {
+      if (!userId || !courseId) return null;
+      const { data, error } = await supabase
+        .from("enrollments")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
     },
   });
 

@@ -14,6 +14,20 @@ interface LessonProgressMap {
 }
 
 /**
+  Normalizes progression mode string values safely without dangerous type assertions.
+  Defaults to "FREE" for null, undefined, or unrecognized values.
+ */
+export function normalizeProgressionMode(value: unknown): ProgressionMode {
+  if (typeof value === "string") {
+    const upper = value.toUpperCase().trim();
+    if (upper === "FREE" || upper === "LINEAR" || upper === "FLEXIBLE") {
+      return upper as ProgressionMode;
+    }
+  }
+  return "FREE";
+}
+
+/**
   Checks whether a specific lesson in a course can be accessed by the user based on the course's progression mode and the user's current progress map.
  */
 export function canAccessLesson(
@@ -22,7 +36,7 @@ export function canAccessLesson(
   progressMap: LessonProgressMap = {},
   isEnrolled: boolean = true,
 ): AccessCheckResult {
-  const mode: ProgressionMode = course.progressionMode || "FREE";
+  const mode: ProgressionMode = normalizeProgressionMode(course?.progressionMode);
 
   // Flatten all lessons in order
   const orderedModules = [...(course.modules || [])].sort((a, b) => a.position - b.position);

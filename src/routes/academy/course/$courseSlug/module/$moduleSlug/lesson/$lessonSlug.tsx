@@ -10,10 +10,11 @@ import { LessonNotFound } from "@/components/lesson-player/LessonNotFound";
 import { LessonPlayerSkeleton } from "@/components/lesson-player/LessonPlayerSkeleton";
 import { MobileCourseSidebar } from "@/components/lesson-player/MobileCourseSidebar";
 import { CourseCompletionModal } from "@/components/lesson-player/CourseCompletionModal";
+import { LessonLocked } from "@/components/lesson-player/LessonLocked";
 import { useLessonPlayer } from "@/components/lesson-player/useLessonPlayer";
 import { useLessonProgress } from "@/components/lesson-player/useLessonProgress";
 import { useTimeTracking } from "@/lib/learning-engine/hooks";
-import { CertificateDraft } from "@/lib/learning-engine/types";
+import { slugify } from "@/lib/admin-api";
 
 export const Route = createFileRoute(
   "/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug",
@@ -30,7 +31,6 @@ export const Route = createFileRoute(
 function LessonPlayerPage() {
   const { courseSlug, moduleSlug, lessonSlug } = Route.useParams();
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
-  const [certDraft, setCertDraft] = useState<CertificateDraft | null>(null);
 
   // 1. Strict hierarchical resolution hook
   const {
@@ -43,6 +43,8 @@ function LessonPlayerPage() {
     currentIndex,
     prevLesson,
     nextLesson,
+    isEnrolled,
+    access,
     serverProgress,
     isServerProgressLoading,
     isServerProgressError,
@@ -62,19 +64,19 @@ function LessonPlayerPage() {
     isServerProgressError,
   });
 
-  // 3. Active Time Tracking Hook from Learning Engine
+  // 3. Active Time Tracking Hook from Learning Engine (only runs if user has access)
   useTimeTracking({
     userId: user?.id,
     courseId: course?.id,
-    lessonId: activeLesson?.id,
+    lessonId: access?.canAccess ? activeLesson?.id : null,
   });
 
-  // Automatically mark current lesson as "in_progress" if not started
+  // Automatically mark current lesson as "in_progress" if not started and accessible
   useEffect(() => {
-    if (activeLesson?.id) {
+    if (activeLesson?.id && access?.canAccess) {
       markAsInProgress(activeLesson.id);
     }
-  }, [activeLesson?.id, markAsInProgress]);
+  }, [activeLesson?.id, access?.canAccess, markAsInProgress]);
 
   // Compute progress counts
   const completedCount = useMemo(() => {
@@ -85,30 +87,38 @@ function LessonPlayerPage() {
   const progressPercent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const handleToggle = async () => {
-    if (!activeLesson) return;
+    if (!activeLesson || !access?.canAccess) return;
     const wasCompleted = statuses[activeLesson.id] === "completed";
     const res = await toggleCompletion(activeLesson.id);
 
     // If toggling resulted in 100% course completion
     if (res && !wasCompleted && totalCount > 0 && completedCount + 1 >= totalCount) {
-      const code = `AILA-CERT-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-      setCertDraft({
-        courseId: course?.id || "",
-        courseTitle: course?.title || "Curso",
-        studentName: user?.email ? user.email.split("@")[0] : "Estudiante",
-        completedAt: new Date().toISOString(),
-        certificateCode: code,
-      });
       setCompletionModalOpen(true);
     }
   };
 
-  // 4. Loading skeleton state
-  if (isCourseLoading || (activeLesson && isBlocksLoading)) {
+  // 4. Resolve required lesson & module slugs for unlock guidance
+  const requiredLessonItem = useMemo(() => {
+    if (!access?.requiredLessonId) return null;
+    return flatLessons.find((l) => l.id === access.requiredLessonId) ?? null;
+  }, [access?.requiredLessonId, flatLessons]);
+
+  const requiredModuleItem = useMemo(() => {
+    if (!access?.requiredModuleId || !course?.modules) return null;
+    return course.modules.find((m) => m.id === access.requiredModuleId) ?? null;
+  }, [access?.requiredModuleId, course?.modules]);
+
+  const requiredLessonSlug = requiredLessonItem?.slug;
+  const requiredModuleSlug =
+    requiredLessonItem?.moduleSlug ||
+    (requiredModuleItem ? slugify(requiredModuleItem.title) || requiredModuleItem.id : undefined);
+
+  // 5. Loading skeleton state
+  if (isCourseLoading || (activeLesson && access?.canAccess && isBlocksLoading)) {
     return <LessonPlayerSkeleton />;
   }
 
-  // 5. Strict 404 state if course, module, or lesson within module is invalid
+  // 6. Strict 404 state if course, module, or lesson within module is invalid
   if (isCourseError || isNotFound || !course || !activeModule || !activeLesson) {
     return <LessonNotFound courseSlug={courseSlug} />;
   }
@@ -123,8 +133,8 @@ function LessonPlayerPage() {
       <CourseCompletionModal
         isOpen={completionModalOpen}
         onClose={() => setCompletionModalOpen(false)}
-        certificateDraft={certDraft}
         courseTitle={course.title}
+        totalLessons={totalCount}
       />
 
       {/* Top Mobile Curriculum Drawer */}
@@ -137,6 +147,7 @@ function LessonPlayerPage() {
         totalCount={totalCount}
         progressPercent={progressPercent}
         currentIndex={currentIndex}
+        isEnrolled={isEnrolled}
       />
 
       {/* Main Responsive Layout */}
@@ -153,6 +164,7 @@ function LessonPlayerPage() {
                 completedCount={completedCount}
                 totalCount={totalCount}
                 progressPercent={progressPercent}
+                isEnrolled={isEnrolled}
               />
             </div>
           </aside>
@@ -167,19 +179,33 @@ function LessonPlayerPage() {
               lessonTitle={activeLesson.title}
             />
 
-            {/* Read-Only Published Lesson Renderer */}
-            <LessonRenderer lesson={activeLesson} blocks={blocks} />
+            {/* Read-Only Published Lesson Renderer or Lesson Locked Screen */}
+            {!access.canAccess ? (
+              <LessonLocked
+                reason={access.reason}
+                courseSlug={course.slug}
+                requiredLessonSlug={requiredLessonSlug}
+                requiredModuleSlug={requiredModuleSlug}
+                requiredLessonTitle={access.requiredLessonTitle || requiredLessonItem?.title}
+                requiredModuleTitle={access.requiredModuleTitle || requiredModuleItem?.title}
+                isNotEnrolled={!isEnrolled && !activeLesson.is_free_preview}
+              />
+            ) : (
+              <LessonRenderer lesson={activeLesson} blocks={blocks} />
+            )}
 
             {/* Bottom Controls: Navigation + Toggle Completion */}
-            <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
-              <LessonNavigation
-                courseSlug={course.slug}
-                prevLesson={prevLesson ?? null}
-                nextLesson={nextLesson ?? null}
-              />
+            {access.canAccess && (
+              <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+                <LessonNavigation
+                  courseSlug={course.slug}
+                  prevLesson={prevLesson ?? null}
+                  nextLesson={nextLesson ?? null}
+                />
 
-              <LessonCompletionButton isCompleted={isCurrentCompleted} onToggle={handleToggle} />
-            </div>
+                <LessonCompletionButton isCompleted={isCurrentCompleted} onToggle={handleToggle} />
+              </div>
+            )}
           </main>
         </div>
       </div>

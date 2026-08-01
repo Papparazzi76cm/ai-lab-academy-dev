@@ -43,7 +43,8 @@ export class ActiveTimeTracker {
 
   public pause() {
     if (!this.isActive || !this.startTime) return;
-    const elapsedSeconds = Math.floor((Date.now() - this.startTime) / 1000);
+    const rawElapsed = Math.floor((Date.now() - this.startTime) / 1000);
+    const elapsedSeconds = Math.min(Math.max(0, rawElapsed), 120);
     if (elapsedSeconds > 0) {
       this.accumulatedSeconds += elapsedSeconds;
     }
@@ -59,7 +60,8 @@ export class ActiveTimeTracker {
 
   public flush() {
     if (this.isActive && this.startTime) {
-      const elapsedSeconds = Math.floor((Date.now() - this.startTime) / 1000);
+      const rawElapsed = Math.floor((Date.now() - this.startTime) / 1000);
+      const elapsedSeconds = Math.min(Math.max(0, rawElapsed), 120);
       if (elapsedSeconds > 0) {
         this.accumulatedSeconds += elapsedSeconds;
       }

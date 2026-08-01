@@ -26,6 +26,7 @@ interface CourseSidebarProps {
   completedCount: number;
   totalCount: number;
   progressPercent: number;
+  isEnrolled?: boolean;
   onSelectLesson?: (() => void) | undefined;
 }
 
@@ -36,6 +37,7 @@ export function CourseSidebar({
   completedCount,
   totalCount,
   progressPercent,
+  isEnrolled = false,
   onSelectLesson,
 }: CourseSidebarProps) {
   const sortedModules = [...(course.modules ?? [])].sort((a, b) => a.position - b.position);
@@ -120,20 +122,22 @@ export function CourseSidebar({
                     minimalCurriculum,
                     lesson.id,
                     progressEngineMap,
-                    true,
+                    isEnrolled,
                   );
 
-                  const isLocked = !access.canAccess && !isSelected;
+                  const isLocked = !access.canAccess;
 
                   return (
                     <li key={lesson.id}>
                       {isLocked ? (
-                        <div
+                        <button
+                          type="button"
+                          aria-disabled="true"
                           onClick={() => {
                             toast.warning(access.reason || "Lección bloqueada");
                           }}
                           className={cn(
-                            "group flex cursor-not-allowed items-center justify-between rounded-xl px-3 py-2.5 text-sm text-muted-foreground/60 transition-all opacity-70 hover:bg-muted/40",
+                            "group flex w-full cursor-not-allowed items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm text-muted-foreground/60 transition-all opacity-70 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           )}
                         >
                           <div className="flex min-w-0 items-center gap-2.5">
@@ -147,7 +151,7 @@ export function CourseSidebar({
                               {formatDuration(lesson.duration_minutes)}
                             </span>
                           )}
-                        </div>
+                        </button>
                       ) : (
                         <Link
                           to="/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug"
