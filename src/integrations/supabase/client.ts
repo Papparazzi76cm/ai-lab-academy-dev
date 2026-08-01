@@ -33,7 +33,7 @@ function createSupabaseClient() {
   const envUrl = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
   const envKey =
     import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_PUBLISHABLE_KEY"];
-  const isProd = import.meta.env.PROD || process.env.NODE_ENV === "production";
+  const isProd = import.meta.env.PROD || process.env["NODE_ENV"] === "production";
 
   if (!envUrl || !envKey) {
     if (isProd) {

@@ -35,7 +35,7 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 function createSupabaseAdminClient() {
   const envUrl = process.env["SUPABASE_URL"];
   const envKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd = process.env["NODE_ENV"] === "production";
 
   if (!envUrl || !envKey) {
     if (isProd) {

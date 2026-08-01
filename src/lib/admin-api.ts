@@ -247,7 +247,15 @@ export const adminRecentChangesQuery = () =>
     queryFn: async (): Promise<RecentChange[]> => {
       const { data, error } = await supabase.rpc("get_cms_recent_changes");
       if (error) throw error;
-      return (data ?? []).map(
+      return (
+        (data as unknown as Array<{
+          id: string;
+          type: "Curso" | "Módulo" | "Lección";
+          title: string;
+          course_id: string;
+          updated_at: string;
+        }>) ?? []
+      ).map(
         (item: {
           id: string;
           type: "Curso" | "Módulo" | "Lección";
@@ -338,7 +346,7 @@ export const deleteResource = (id: string) => run(supabase.from("resources").del
 export async function persistOrder(table: "modules" | "lessons", ids: string[]) {
   const items = ids.map((id, index) => ({ id, position: index + 1 }));
   const { error } = await supabase.rpc("reorder_items_rpc", {
-    p_table: table,
+    p_table_name: table,
     p_items: items,
   });
   if (error) throw error;

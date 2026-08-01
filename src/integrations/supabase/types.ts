@@ -570,6 +570,47 @@ export type Database = {
           },
         ];
       };
+      lesson_blocks: {
+        Row: {
+          content_json: Json;
+          created_at: string;
+          id: string;
+          lesson_id: string;
+          position: number;
+          settings_json: Json;
+          type: string;
+          updated_at: string;
+        };
+        Insert: {
+          content_json?: Json;
+          created_at?: string;
+          id?: string;
+          lesson_id: string;
+          position?: number;
+          settings_json?: Json;
+          type: string;
+          updated_at?: string;
+        };
+        Update: {
+          content_json?: Json;
+          created_at?: string;
+          id?: string;
+          lesson_id?: string;
+          position?: number;
+          settings_json?: Json;
+          type?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "lesson_blocks_lesson_id_fkey";
+            columns: ["lesson_id"];
+            isOneToOne: false;
+            referencedRelation: "lessons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       lessons: {
         Row: {
           content: Json;
@@ -1002,7 +1043,34 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      get_cms_stats: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
+      get_cms_recent_changes: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
+      duplicate_course_rpc: {
+        Args: {
+          p_course_id: string;
+        };
+        Returns: string;
+      };
+      reorder_items_rpc: {
+        Args: {
+          p_table_name: string;
+          p_items: Json;
+        };
+        Returns: boolean;
+      };
+      reorder_lesson_blocks_rpc: {
+        Args: {
+          p_lesson_id: string;
+          p_blocks: Json;
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       app_role: "admin" | "instructor" | "student";
