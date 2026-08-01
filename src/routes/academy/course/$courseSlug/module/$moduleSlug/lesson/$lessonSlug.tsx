@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { LessonRenderer } from "@/components/lesson/LessonRenderer";
 import { CourseSidebar } from "@/components/lesson-player/CourseSidebar";
@@ -9,8 +9,11 @@ import { LessonNavigation } from "@/components/lesson-player/LessonNavigation";
 import { LessonNotFound } from "@/components/lesson-player/LessonNotFound";
 import { LessonPlayerSkeleton } from "@/components/lesson-player/LessonPlayerSkeleton";
 import { MobileCourseSidebar } from "@/components/lesson-player/MobileCourseSidebar";
+import { CourseCompletionModal } from "@/components/lesson-player/CourseCompletionModal";
 import { useLessonPlayer } from "@/components/lesson-player/useLessonPlayer";
 import { useLessonProgress } from "@/components/lesson-player/useLessonProgress";
+import { useTimeTracking } from "@/lib/learning-engine/hooks";
+import { CertificateDraft } from "@/lib/learning-engine/types";
 
 export const Route = createFileRoute(
   "/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug",
@@ -26,6 +29,8 @@ export const Route = createFileRoute(
 
 function LessonPlayerPage() {
   const { courseSlug, moduleSlug, lessonSlug } = Route.useParams();
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
+  const [certDraft, setCertDraft] = useState<CertificateDraft | null>(null);
 
   // 1. Strict hierarchical resolution hook
   const {
@@ -57,6 +62,13 @@ function LessonPlayerPage() {
     isServerProgressError,
   });
 
+  // 3. Active Time Tracking Hook from Learning Engine
+  useTimeTracking({
+    userId: user?.id,
+    courseId: course?.id,
+    lessonId: activeLesson?.id,
+  });
+
   // Automatically mark current lesson as "in_progress" if not started
   useEffect(() => {
     if (activeLesson?.id) {
@@ -72,12 +84,31 @@ function LessonPlayerPage() {
   const totalCount = flatLessons.length;
   const progressPercent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // 3. Loading skeleton state
+  const handleToggle = async () => {
+    if (!activeLesson) return;
+    const wasCompleted = statuses[activeLesson.id] === "completed";
+    const res = await toggleCompletion(activeLesson.id);
+
+    // If toggling resulted in 100% course completion
+    if (res && !wasCompleted && totalCount > 0 && completedCount + 1 >= totalCount) {
+      const code = `AILA-CERT-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+      setCertDraft({
+        courseId: course?.id || "",
+        courseTitle: course?.title || "Curso",
+        studentName: user?.email ? user.email.split("@")[0] : "Estudiante",
+        completedAt: new Date().toISOString(),
+        certificateCode: code,
+      });
+      setCompletionModalOpen(true);
+    }
+  };
+
+  // 4. Loading skeleton state
   if (isCourseLoading || (activeLesson && isBlocksLoading)) {
     return <LessonPlayerSkeleton />;
   }
 
-  // 4. Strict 404 state if course, module, or lesson within module is invalid
+  // 5. Strict 404 state if course, module, or lesson within module is invalid
   if (isCourseError || isNotFound || !course || !activeModule || !activeLesson) {
     return <LessonNotFound courseSlug={courseSlug} />;
   }
@@ -87,6 +118,14 @@ function LessonPlayerPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <SiteHeader />
+
+      {/* Course Completion Celebration Modal */}
+      <CourseCompletionModal
+        isOpen={completionModalOpen}
+        onClose={() => setCompletionModalOpen(false)}
+        certificateDraft={certDraft}
+        courseTitle={course.title}
+      />
 
       {/* Top Mobile Curriculum Drawer */}
       <MobileCourseSidebar
@@ -139,10 +178,7 @@ function LessonPlayerPage() {
                 nextLesson={nextLesson ?? null}
               />
 
-              <LessonCompletionButton
-                isCompleted={isCurrentCompleted}
-                onToggle={() => toggleCompletion(activeLesson.id)}
-              />
+              <LessonCompletionButton isCompleted={isCurrentCompleted} onToggle={handleToggle} />
             </div>
           </main>
         </div>

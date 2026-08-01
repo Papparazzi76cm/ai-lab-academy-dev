@@ -1,11 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, Circle, Clock, PlayCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Clock, Lock, PlayCircle } from "lucide-react";
 import { formatDuration } from "@/lib/api";
 import { slugify } from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
 import { CourseProgress } from "./CourseProgress";
 import type { LessonProgressStatus } from "./useLessonProgress";
 import type { Tables } from "@/integrations/supabase/types";
+import { canAccessLesson } from "@/lib/learning-engine/unlock";
+import { toast } from "sonner";
 
 export type CourseModuleWithLessons = Tables<"modules"> & {
   lessons?: Tables<"lessons">[] | null;
@@ -13,6 +15,7 @@ export type CourseModuleWithLessons = Tables<"modules"> & {
 
 export type CourseWithModules = Tables<"courses"> & {
   modules?: CourseModuleWithLessons[] | null;
+  progression_mode?: "FREE" | "LINEAR" | "FLEXIBLE" | string;
 };
 
 interface CourseSidebarProps {
@@ -36,6 +39,38 @@ export function CourseSidebar({
   onSelectLesson,
 }: CourseSidebarProps) {
   const sortedModules = [...(course.modules ?? [])].sort((a, b) => a.position - b.position);
+
+  // Convert course to minimal curriculum structure for unlock engine
+  const minimalCurriculum = {
+    id: course.id,
+    title: course.title,
+    progressionMode: (course.progression_mode as "FREE" | "LINEAR" | "FLEXIBLE") || "FREE",
+    modules: sortedModules.map((m) => ({
+      id: m.id,
+      title: m.title,
+      slug: slugify(m.title) || m.id,
+      position: m.position,
+      lessons: [...(m.lessons ?? [])]
+        .sort((a, b) => a.position - b.position)
+        .map((l) => ({
+          id: l.id,
+          title: l.title,
+          slug: l.slug,
+          position: l.position,
+          moduleId: m.id,
+          isFreePreview: l.is_free_preview,
+        })),
+    })),
+  };
+
+  // Convert statuses for progress engine map
+  const progressEngineMap = Object.entries(statuses).reduce(
+    (acc, [id, status]) => {
+      acc[id] = { completed: status === "completed", status };
+      return acc;
+    },
+    {} as Record<string, { completed: boolean; status?: string }>,
+  );
 
   return (
     <div className="flex flex-col space-y-6">
@@ -81,63 +116,95 @@ export function CourseSidebar({
                   const status = statuses[lesson.id] || "not_started";
                   const isSelected = lesson.id === activeLessonId;
 
+                  const access = canAccessLesson(
+                    minimalCurriculum,
+                    lesson.id,
+                    progressEngineMap,
+                    true,
+                  );
+
+                  const isLocked = !access.canAccess && !isSelected;
+
                   return (
                     <li key={lesson.id}>
-                      <Link
-                        to="/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug"
-                        params={{
-                          courseSlug: course.slug,
-                          moduleSlug: modSlug,
-                          lessonSlug: lesson.slug,
-                        }}
-                        onClick={onSelectLesson}
-                        className={cn(
-                          "group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          isSelected
-                            ? "bg-primary font-medium text-primary-foreground shadow-xs"
-                            : "text-foreground hover:bg-muted/80",
-                        )}
-                      >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          {status === "completed" ? (
-                            <CheckCircle2
-                              className={cn(
-                                "size-4 shrink-0",
-                                isSelected ? "text-primary-foreground" : "text-emerald-500",
-                              )}
-                            />
-                          ) : status === "in_progress" ? (
-                            <PlayCircle
-                              className={cn(
-                                "size-4 shrink-0",
-                                isSelected ? "text-primary-foreground" : "text-amber-500",
-                              )}
-                            />
-                          ) : (
-                            <Circle
-                              className={cn(
-                                "size-4 shrink-0",
-                                isSelected
-                                  ? "text-primary-foreground/70"
-                                  : "text-muted-foreground/60",
-                              )}
-                            />
+                      {isLocked ? (
+                        <div
+                          onClick={() => {
+                            toast.warning(access.reason || "Lección bloqueada");
+                          }}
+                          className={cn(
+                            "group flex cursor-not-allowed items-center justify-between rounded-xl px-3 py-2.5 text-sm text-muted-foreground/60 transition-all opacity-70 hover:bg-muted/40",
                           )}
-                          <span className="truncate">{lesson.title}</span>
-                        </div>
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <Lock className="size-4 shrink-0 text-muted-foreground/50" />
+                            <span className="truncate">{lesson.title}</span>
+                          </div>
 
-                        {lesson.duration_minutes > 0 && (
-                          <span
-                            className={cn(
-                              "ml-2 flex shrink-0 items-center gap-1 text-[11px]",
-                              isSelected ? "text-primary-foreground/80" : "text-muted-foreground",
+                          {lesson.duration_minutes > 0 && (
+                            <span className="ml-2 flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground/50">
+                              <Clock className="size-3" />
+                              {formatDuration(lesson.duration_minutes)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <Link
+                          to="/academy/course/$courseSlug/module/$moduleSlug/lesson/$lessonSlug"
+                          params={{
+                            courseSlug: course.slug,
+                            moduleSlug: modSlug,
+                            lessonSlug: lesson.slug,
+                          }}
+                          onClick={onSelectLesson}
+                          className={cn(
+                            "group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            isSelected
+                              ? "bg-primary font-medium text-primary-foreground shadow-xs"
+                              : "text-foreground hover:bg-muted/80",
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            {status === "completed" ? (
+                              <CheckCircle2
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  isSelected ? "text-primary-foreground" : "text-emerald-500",
+                                )}
+                              />
+                            ) : status === "in_progress" ? (
+                              <PlayCircle
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  isSelected ? "text-primary-foreground" : "text-amber-500",
+                                )}
+                              />
+                            ) : (
+                              <Circle
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  isSelected
+                                    ? "text-primary-foreground/70"
+                                    : "text-muted-foreground/60",
+                                )}
+                              />
                             )}
-                          >
-                            <Clock className="size-3" />
-                            {formatDuration(lesson.duration_minutes)}
-                          </span>
-                        )}
-                      </Link>
+                            <span className="truncate">{lesson.title}</span>
+                          </div>
+
+                          {lesson.duration_minutes > 0 && (
+                            <span
+                              className={cn(
+                                "ml-2 flex shrink-0 items-center gap-1 text-[11px]",
+                                isSelected ? "text-primary-foreground/80" : "text-muted-foreground",
+                              )}
+                            >
+                              <Clock className="size-3" />
+                              {formatDuration(lesson.duration_minutes)}
+                            </span>
+                          )}
+                        </Link>
+                      )}
                     </li>
                   );
                 })}

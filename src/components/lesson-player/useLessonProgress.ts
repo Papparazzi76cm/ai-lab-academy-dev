@@ -143,17 +143,12 @@ export function useLessonProgress({
 
       // Persist to Supabase if logged in
       if (triggerUserId && triggerCourseId) {
-        const { error } = await supabase.from("lesson_progress").upsert(
-          {
-            user_id: triggerUserId,
-            lesson_id: lessonId,
-            course_id: triggerCourseId,
-            completed: nextCompleted,
-            status: nextStatus,
-            completed_at: nextCompleted ? new Date().toISOString() : null,
-          },
-          { onConflict: "user_id,lesson_id" },
-        );
+        const { error } = await supabase.rpc("update_lesson_progress_rpc", {
+          p_lesson_id: lessonId,
+          p_course_id: triggerCourseId,
+          p_completed: nextCompleted,
+          p_status: nextStatus,
+        });
 
         // Check if identity or sequence changed while request was in flight
         if (

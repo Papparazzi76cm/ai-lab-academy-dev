@@ -259,6 +259,7 @@ export type Database = {
           language: string;
           level: Database["public"]["Enums"]["course_level"];
           price_cents: number;
+          progression_mode: "FREE" | "LINEAR" | "FLEXIBLE";
           promo_video_url: string | null;
           published_at: string | null;
           rating: number;
@@ -286,6 +287,7 @@ export type Database = {
           language?: string;
           level?: Database["public"]["Enums"]["course_level"];
           price_cents?: number;
+          progression_mode?: "FREE" | "LINEAR" | "FLEXIBLE";
           promo_video_url?: string | null;
           published_at?: string | null;
           rating?: number;
@@ -313,6 +315,7 @@ export type Database = {
           language?: string;
           level?: Database["public"]["Enums"]["course_level"];
           price_cents?: number;
+          progression_mode?: "FREE" | "LINEAR" | "FLEXIBLE";
           promo_video_url?: string | null;
           published_at?: string | null;
           rating?: number;
@@ -511,6 +514,7 @@ export type Database = {
           course_id: string;
           created_at: string;
           id: string;
+          last_position: number;
           last_position_seconds: number;
           lesson_id: string;
           progress_percent: number;
@@ -527,6 +531,7 @@ export type Database = {
           course_id: string;
           created_at?: string;
           id?: string;
+          last_position?: number;
           last_position_seconds?: number;
           lesson_id: string;
           progress_percent?: number;
@@ -543,6 +548,7 @@ export type Database = {
           course_id?: string;
           created_at?: string;
           id?: string;
+          last_position?: number;
           last_position_seconds?: number;
           lesson_id?: string;
           progress_percent?: number;
@@ -563,6 +569,175 @@ export type Database = {
           },
           {
             foreignKeyName: "lesson_progress_lesson_id_fkey";
+            columns: ["lesson_id"];
+            isOneToOne: false;
+            referencedRelation: "lessons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      module_progress: {
+        Row: {
+          completed_at: string | null;
+          completed_lessons: number;
+          course_id: string;
+          created_at: string;
+          id: string;
+          module_id: string;
+          percentage: number;
+          total_lessons: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          completed_at?: string | null;
+          completed_lessons?: number;
+          course_id: string;
+          created_at?: string;
+          id?: string;
+          module_id: string;
+          percentage?: number;
+          total_lessons?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          completed_at?: string | null;
+          completed_lessons?: number;
+          course_id?: string;
+          created_at?: string;
+          id?: string;
+          module_id?: string;
+          percentage?: number;
+          total_lessons?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "module_progress_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "module_progress_module_id_fkey";
+            columns: ["module_id"];
+            isOneToOne: false;
+            referencedRelation: "modules";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      course_progress: {
+        Row: {
+          completed_at: string | null;
+          completed_lessons: number;
+          completed_modules: number;
+          course_id: string;
+          created_at: string;
+          id: string;
+          last_lesson_id: string | null;
+          percentage: number;
+          total_lessons: number;
+          total_modules: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          completed_at?: string | null;
+          completed_lessons?: number;
+          completed_modules?: number;
+          course_id: string;
+          created_at?: string;
+          id?: string;
+          last_lesson_id?: string | null;
+          percentage?: number;
+          total_lessons?: number;
+          total_modules?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          completed_at?: string | null;
+          completed_lessons?: number;
+          completed_modules?: number;
+          course_id?: string;
+          created_at?: string;
+          id?: string;
+          last_lesson_id?: string | null;
+          percentage?: number;
+          total_lessons?: number;
+          total_modules?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_progress_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_progress_last_lesson_id_fkey";
+            columns: ["last_lesson_id"];
+            isOneToOne: false;
+            referencedRelation: "lessons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      learning_events: {
+        Row: {
+          course_id: string | null;
+          created_at: string;
+          event_type: string;
+          id: string;
+          lesson_id: string | null;
+          metadata: Json;
+          module_id: string | null;
+          user_id: string;
+        };
+        Insert: {
+          course_id?: string | null;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          lesson_id?: string | null;
+          metadata?: Json;
+          module_id?: string | null;
+          user_id: string;
+        };
+        Update: {
+          course_id?: string | null;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          lesson_id?: string | null;
+          metadata?: Json;
+          module_id?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "learning_events_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "learning_events_module_id_fkey";
+            columns: ["module_id"];
+            isOneToOne: false;
+            referencedRelation: "modules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "learning_events_lesson_id_fkey";
             columns: ["lesson_id"];
             isOneToOne: false;
             referencedRelation: "lessons";
@@ -1070,6 +1245,27 @@ export type Database = {
           p_blocks: Json;
         };
         Returns: boolean;
+      };
+      update_lesson_progress_rpc: {
+        Args: {
+          p_lesson_id: string;
+          p_course_id: string;
+          p_completed?: boolean;
+          p_status?: string;
+          p_seconds_spent?: number;
+          p_last_position?: number;
+        };
+        Returns: Json;
+      };
+      record_learning_event_rpc: {
+        Args: {
+          p_event_type: string;
+          p_course_id?: string;
+          p_module_id?: string;
+          p_lesson_id?: string;
+          p_metadata?: Json;
+        };
+        Returns: string;
       };
     };
     Enums: {
