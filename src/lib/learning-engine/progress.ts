@@ -136,17 +136,26 @@ export async function syncLessonProgressRpc(params: {
   coursePercentage: number;
   isCourseCompleted: boolean;
 }> {
-  const { data, error } = await supabase.rpc("update_lesson_progress_rpc", {
+  const { data, error } = await (
+    supabase.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: unknown }>
+  )("update_lesson_progress_rpc", {
     p_lesson_id: params.lessonId,
     p_course_id: params.courseId,
-    p_completed: params.completed,
-    p_status: params.status,
-    p_seconds_spent: params.secondsSpent || 0,
-    p_last_position: params.lastPosition || 0,
+    p_completed: params.completed ?? false,
+    p_status: params.status ?? "in_progress",
+    p_seconds_spent: params.secondsSpent ?? 0,
+    p_last_position: params.lastPosition ?? 0,
   });
 
   if (error) {
-    throw new Error(`Failed to sync lesson progress: ${error.message}`);
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message: unknown }).message)
+        : "Unknown error";
+    throw new Error(`Failed to sync lesson progress: ${message}`);
   }
 
   const parsed = typeof data === "string" ? JSON.parse(data) : data;

@@ -9,8 +9,22 @@ import type { Tables } from "@/integrations/supabase/types";
 import { canAccessLesson } from "@/lib/learning-engine/unlock";
 import { toast } from "sonner";
 
+export type SafeLessonMetadata = Pick<
+  Tables<"lessons">,
+  | "id"
+  | "title"
+  | "slug"
+  | "position"
+  | "duration_minutes"
+  | "is_free_preview"
+  | "status"
+  | "course_id"
+  | "module_id"
+> &
+  Partial<Tables<"lessons">>;
+
 export type CourseModuleWithLessons = Tables<"modules"> & {
-  lessons?: Tables<"lessons">[] | null;
+  lessons?: SafeLessonMetadata[] | null;
 };
 
 export type CourseWithModules = Tables<"courses"> & {

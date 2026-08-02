@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type LessonProgressStatus = "not_started" | "in_progress" | "completed";
+
+export interface ToggleCompletionResult {
+  success: boolean;
+  data?:
+    | {
+        status?: string;
+        completed?: boolean;
+        module_percentage?: number;
+        course_percentage?: number;
+        is_course_completed?: boolean;
+      }
+    | null
+    | undefined;
+}
 
 interface UseLessonProgressParams {
   userId?: string | undefined;
@@ -22,7 +37,7 @@ interface UseLessonProgressParams {
 /**
  * Custom hook to manage student lesson completion progress.
  * Adheres strictly to isolated localStorage keys: academy_progress_${userId ?? "guest"}_${courseId}
- * Handles optimistic updates, rollbacks on Supabase error, and sequence locks to avoid stale async overrides.
+ * Handles optimistic updates, rollbacks on Supabase error, sequence locks, and query invalidation.
  */
 export function useLessonProgress({
   userId,
@@ -32,23 +47,20 @@ export function useLessonProgress({
   isServerProgressLoading = false,
   isServerProgressError = false,
 }: UseLessonProgressParams) {
+  const queryClient = useQueryClient();
   const storageKey = `academy_progress_${userId ?? "guest"}_${courseId ?? courseSlug}`;
 
   const [statuses, setStatuses] = useState<Record<string, LessonProgressStatus>>({});
 
-  // Track last mutation sequence number and identity version to prevent stale async responses from overwriting recent user actions
   const identityVersionRef = useRef<number>(0);
   const lastSeqRef = useRef<number>(0);
 
-  // Increment identity version and invalidate pending mutations on user or course identity change
   useEffect(() => {
     identityVersionRef.current += 1;
     lastSeqRef.current += 1;
   }, [userId, courseId]);
 
-  // Reconcile server progress with local storage fallback
   useEffect(() => {
-    // If authenticated user and server progress query is still loading, wait for completion
     if (userId && isServerProgressLoading) {
       return;
     }
@@ -57,7 +69,6 @@ export function useLessonProgress({
 
     if (userId) {
       if (!isServerProgressError) {
-        // Authenticated user with successful query: serverProgress is EXCLUSIVE source of truth
         serverProgress.forEach((p) => {
           if (p.completed) {
             nextMap[p.lesson_id] = "completed";
@@ -67,9 +78,7 @@ export function useLessonProgress({
             nextMap[p.lesson_id] = "in_progress";
           }
         });
-        // Lessons not present in serverProgress are treated as not_started automatically
       } else {
-        // Fallback to localStorage ONLY if authenticated query failed
         try {
           const stored = localStorage.getItem(storageKey);
           if (stored) {
@@ -81,7 +90,6 @@ export function useLessonProgress({
         }
       }
     } else {
-      // Unauthenticated guest user: use localStorage
       try {
         const stored = localStorage.getItem(storageKey);
         if (stored) {
@@ -93,11 +101,9 @@ export function useLessonProgress({
       }
     }
 
-    // Clean replacement: never merge with previous state from another user/session
     setStatuses(nextMap);
   }, [userId, storageKey, serverProgress, isServerProgressLoading, isServerProgressError]);
 
-  // Mark lesson as in_progress if not started yet
   const markAsInProgress = useCallback(
     (lessonId: string) => {
       setStatuses((prev) => {
@@ -116,9 +122,8 @@ export function useLessonProgress({
     [storageKey],
   );
 
-  // Toggle completion with optimistic update and rollback on failure
   const toggleCompletion = useCallback(
-    async (lessonId: string): Promise<boolean> => {
+    async (lessonId: string): Promise<ToggleCompletionResult> => {
       const triggerUserId = userId;
       const triggerCourseId = courseId;
       const triggerStorageKey = storageKey;
@@ -133,7 +138,6 @@ export function useLessonProgress({
       const previousStatuses = { ...statuses };
       const updatedStatuses = { ...statuses, [lessonId]: nextStatus };
 
-      // Optimistic update
       setStatuses(updatedStatuses);
       try {
         localStorage.setItem(triggerStorageKey, JSON.stringify(updatedStatuses));
@@ -141,25 +145,24 @@ export function useLessonProgress({
         // Ignore
       }
 
-      // Persist to Supabase if logged in
+      let rpcData: ToggleCompletionResult["data"] = null;
+
       if (triggerUserId && triggerCourseId) {
-        const { error } = await supabase.rpc("update_lesson_progress_rpc", {
+        const { data, error } = await supabase.rpc("update_lesson_progress_rpc", {
           p_lesson_id: lessonId,
           p_course_id: triggerCourseId,
           p_completed: nextCompleted,
           p_status: nextStatus,
         });
 
-        // Check if identity or sequence changed while request was in flight
         if (
           mutationIdentityVersion !== identityVersionRef.current ||
           mutationSeq !== lastSeqRef.current
         ) {
-          return true;
+          return { success: true, data: data as ToggleCompletionResult["data"] };
         }
 
         if (error) {
-          // Revert optimistic update
           setStatuses(previousStatuses);
           try {
             localStorage.setItem(triggerStorageKey, JSON.stringify(previousStatuses));
@@ -169,16 +172,22 @@ export function useLessonProgress({
           toast.error(
             "No se pudo guardar el progreso en el servidor. Se ha restaurado el estado anterior.",
           );
-          return false;
+          return { success: false, data: null };
         }
+
+        rpcData = data as ToggleCompletionResult["data"];
+
+        // Invalidate queries to trigger immediate UI sync
+        queryClient.invalidateQueries({ queryKey: ["my-progress"] });
+        queryClient.invalidateQueries({ queryKey: ["accessible-lesson-content"] });
+        queryClient.invalidateQueries({ queryKey: ["progress"] });
       }
 
-      // Check if identity or sequence changed while request was in flight
       if (
         mutationIdentityVersion !== identityVersionRef.current ||
         mutationSeq !== lastSeqRef.current
       ) {
-        return true;
+        return { success: true, data: rpcData };
       }
 
       if (nextCompleted) {
@@ -187,9 +196,9 @@ export function useLessonProgress({
         toast.info("Lección marcada en progreso");
       }
 
-      return true;
+      return { success: true, data: rpcData };
     },
-    [statuses, storageKey, userId, courseId],
+    [statuses, storageKey, userId, courseId, queryClient],
   );
 
   return {

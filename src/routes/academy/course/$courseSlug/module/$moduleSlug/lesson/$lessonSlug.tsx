@@ -66,9 +66,9 @@ function LessonPlayerPage() {
 
   // 3. Active Time Tracking Hook from Learning Engine (only runs if user has access)
   useTimeTracking({
-    userId: user?.id,
-    courseId: course?.id,
-    lessonId: access?.canAccess ? activeLesson?.id : null,
+    userId: user?.id ?? null,
+    courseId: course?.id ?? null,
+    lessonId: access?.canAccess ? (activeLesson?.id ?? null) : null,
   });
 
   // Automatically mark current lesson as "in_progress" if not started and accessible
@@ -88,11 +88,10 @@ function LessonPlayerPage() {
 
   const handleToggle = async () => {
     if (!activeLesson || !access?.canAccess) return;
-    const wasCompleted = statuses[activeLesson.id] === "completed";
     const res = await toggleCompletion(activeLesson.id);
 
-    // If toggling resulted in 100% course completion
-    if (res && !wasCompleted && totalCount > 0 && completedCount + 1 >= totalCount) {
+    // Open completion modal strictly based on server RPC response indicating course completion
+    if (res.success && res.data?.is_course_completed) {
       setCompletionModalOpen(true);
     }
   };

@@ -69,7 +69,14 @@ export function canAccessLesson(
     return { canAccess: true };
   }
 
-  // 1. FREE Mode: All lessons accessible
+  if (!isEnrolled) {
+    return {
+      canAccess: false,
+      reason: "Debes estar inscrito en el curso para acceder a esta lección.",
+    };
+  }
+
+  // 1. FREE Mode: All lessons accessible once enrolled
   if (mode === "FREE") {
     return { canAccess: true };
   }
@@ -85,6 +92,9 @@ export function canAccessLesson(
   // 2. LINEAR Mode: Target lesson is unlocked ONLY IF immediately preceding lesson is completed
   if (mode === "LINEAR") {
     const prevItem = flatLessons[targetIndex - 1];
+    if (!prevItem) {
+      return { canAccess: true };
+    }
     const prevProgress = progressMap[prevItem.lesson.id];
     const isPrevCompleted = Boolean(prevProgress && prevProgress.completed);
 
@@ -114,6 +124,7 @@ export function canAccessLesson(
     // Check all previous modules (0 to targetModuleIndex - 1)
     for (let i = 0; i < targetModuleIndex; i++) {
       const prevModule = orderedModules[i];
+      if (!prevModule) continue;
       const uncompletedInPrev = (prevModule.lessons || []).some((l) => {
         const prog = progressMap[l.id];
         return !prog || !prog.completed;

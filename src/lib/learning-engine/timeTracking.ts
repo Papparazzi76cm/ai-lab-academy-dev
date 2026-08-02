@@ -50,6 +50,7 @@ export class ActiveTimeTracker {
     }
     this.startTime = null;
     this.isActive = false;
+    this.flush();
   }
 
   public resume() {

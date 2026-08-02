@@ -4,9 +4,18 @@ import { BlockRenderer } from "./BlockRenderer";
 import type { Tables } from "@/integrations/supabase/types";
 import { getSafeVideoEmbedUrl, sanitizeUrl } from "@/lib/url-security";
 
-export type LessonWithResources = Tables<"lessons"> & {
-  resources?: Tables<"resources">[] | null;
-};
+export type LessonWithResources = Partial<Tables<"lessons">> &
+  Pick<Tables<"lessons">, "id" | "title" | "slug"> & {
+    video_url?: string | null;
+    description?: string | null;
+    resources?: Array<{
+      id: string;
+      title: string;
+      url: string;
+      resource_type?: string;
+      is_public?: boolean;
+    }> | null;
+  };
 
 interface LessonRendererProps {
   lesson: LessonWithResources;

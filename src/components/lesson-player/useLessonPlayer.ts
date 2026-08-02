@@ -2,17 +2,26 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  accessibleLessonContentQuery,
   courseQuery,
-  lessonBlocksQuery,
   myEnrollmentForCourseQuery,
   myProgressQuery,
 } from "@/lib/api";
-import { parseBlocks, type BlockType, type LessonBlockItem } from "@/lib/blocks";
+import type { BlockType, LessonBlockItem } from "@/lib/blocks";
 import { slugify } from "@/lib/admin-api";
 import type { Tables } from "@/integrations/supabase/types";
 import { canAccessLesson, normalizeProgressionMode } from "@/lib/learning-engine/unlock";
 
-export interface FlatLessonItem extends Tables<"lessons"> {
+export interface FlatLessonItem {
+  id: string;
+  title: string;
+  slug: string;
+  position: number;
+  duration_minutes: number | null;
+  is_free_preview: boolean;
+  status: string;
+  course_id: string;
+  module_id: string;
   moduleTitle: string;
   moduleSlug: string;
   moduleId: string;
@@ -30,17 +39,12 @@ interface UseLessonPlayerParams {
  * 1. Resolve course by courseSlug.
  * 2. Resolve module within that course by moduleSlug.
  * 3. Resolve lesson EXCLUSIVELY within that module by lessonSlug.
- * Returns 404 (isNotFound = true) if any hierarchy link fails.
+ * 4. Fetch protected lesson content & blocks strictly via secure RPC get_accessible_lesson_content_rpc.
  */
-export function useLessonPlayer({
-  courseSlug,
-  moduleSlug,
-  lessonSlug,
-  isBlocksEnabled = true,
-}: UseLessonPlayerParams) {
+export function useLessonPlayer({ courseSlug, moduleSlug, lessonSlug }: UseLessonPlayerParams) {
   const { user } = useAuth();
 
-  // 1. Fetch Course
+  // 1. Fetch Course metadata
   const {
     data: course,
     isLoading: isCourseLoading,
@@ -50,11 +54,7 @@ export function useLessonPlayer({
   // 2. Fetch User Enrollment for Course
   const { data: enrollment } = useQuery(myEnrollmentForCourseQuery(user?.id, course?.id));
 
-  const isAdmin =
-    user?.role === "admin" ||
-    (user?.app_metadata as Record<string, unknown> | undefined)?.role === "admin";
-  const isOwnerInstructor = Boolean(course?.instructor_id && user?.id === course.instructor_id);
-  const isEnrolled = Boolean(enrollment?.status === "active" || isAdmin || isOwnerInstructor);
+  const isEnrolled = Boolean(enrollment?.status === "active");
 
   // 3. Strict Hierarchical Resolution: Module within Course
   const activeModule = useMemo(() => {
@@ -88,7 +88,7 @@ export function useLessonPlayer({
     isError: isServerProgressError,
   } = useQuery(myProgressQuery(user?.id, course?.id));
 
-  // 6. Compute minimal curriculum and evaluate server/client access control
+  // 6. Compute minimal curriculum and evaluate client pre-check
   const minimalCurriculum = useMemo(() => {
     if (!course) return null;
     const sortedModules = [...(course.modules ?? [])].sort((a, b) => a.position - b.position);
@@ -123,37 +123,65 @@ export function useLessonPlayer({
     return map;
   }, [serverProgress]);
 
-  const access = useMemo(() => {
+  const clientAccessCheck = useMemo(() => {
     if (!minimalCurriculum || !activeLesson) return { canAccess: true };
     return canAccessLesson(minimalCurriculum, activeLesson.id, progressEngineMap, isEnrolled);
   }, [minimalCurriculum, activeLesson, progressEngineMap, isEnrolled]);
 
-  // 7. Fetch Blocks for active lesson ONLY IF lesson exists and user has access
-  const blocksQueryOptions = lessonBlocksQuery(activeLesson?.id);
-  const { data: rawBlocks = [], isLoading: isBlocksLoading } = useQuery({
-    ...blocksQueryOptions,
-    enabled: Boolean(activeLesson?.id) && access.canAccess && isBlocksEnabled,
+  // 7. Secure RPC Query: Sole authority for video_url, lesson_blocks, resources, and server authorization
+  const { data: contentResult, isLoading: isContentLoading } = useQuery({
+    ...accessibleLessonContentQuery(activeLesson?.id),
+    enabled: Boolean(activeLesson?.id) && clientAccessCheck.canAccess,
   });
 
-  // Parse blocks or fallback to lesson content JSON if published blocks table is empty
-  const blocks: LessonBlockItem[] = useMemo(() => {
-    if (rawBlocks && rawBlocks.length > 0) {
-      return rawBlocks.map((b) => ({
-        id: b.id,
-        lesson_id: b.lesson_id,
-        position: b.position,
-        type: b.type as BlockType,
-        content_json: (b.content_json as Record<string, unknown>) ?? {},
-        settings_json: (b.settings_json as Record<string, unknown>) ?? {},
-      }));
+  // Access status strictly driven by server RPC result when available
+  const access = useMemo(() => {
+    if (!clientAccessCheck.canAccess) {
+      return clientAccessCheck;
     }
-    if (activeLesson?.content) {
-      return parseBlocks(activeLesson.content);
+    if (contentResult) {
+      if (!contentResult.can_access) {
+        return {
+          canAccess: false,
+          reason: contentResult.reason || "Acceso denegado por el servidor.",
+        };
+      }
+      return { canAccess: true };
     }
-    return [];
-  }, [rawBlocks, activeLesson]);
+    return clientAccessCheck;
+  }, [clientAccessCheck, contentResult]);
 
-  // 6. Ordered flat lesson list across all course modules for linear navigation
+  // Extract blocks strictly from RPC result (NO fallback to activeLesson.content)
+  const blocks: LessonBlockItem[] = useMemo(() => {
+    if (!access.canAccess || !contentResult?.blocks) return [];
+    return contentResult.blocks.map((b) => {
+      const raw = b as unknown as Record<string, unknown>;
+      return {
+        id: typeof raw["id"] === "string" ? raw["id"] : "",
+        lesson_id: typeof raw["lesson_id"] === "string" ? raw["lesson_id"] : "",
+        position: typeof raw["position"] === "number" ? raw["position"] : 0,
+        type: (raw["block_type"] || raw["type"] || "text") as BlockType,
+        content_json: (raw["content"] || raw["content_json"] || {}) as Record<string, unknown>,
+        settings_json: (raw["settings"] || raw["settings_json"] || {}) as Record<string, unknown>,
+      };
+    });
+  }, [access, contentResult]);
+
+  // Full lesson object with protected video_url & resources supplied by RPC
+  const fullLesson = useMemo(() => {
+    if (!activeLesson) return null;
+    if (!access.canAccess || !contentResult?.lesson) {
+      return activeLesson;
+    }
+    return {
+      ...activeLesson,
+      video_url: contentResult.lesson.video_url,
+      description: contentResult.lesson.description,
+      resources: contentResult.resources ?? [],
+    };
+  }, [activeLesson, access, contentResult]);
+
+  // Flat lessons list for linear navigation UI
   const flatLessons: FlatLessonItem[] = useMemo(() => {
     if (!course?.modules) return [];
     const sortedModules = [...course.modules].sort((a, b) => a.position - b.position);
@@ -171,7 +199,6 @@ export function useLessonPlayer({
     });
   }, [course]);
 
-  // Navigation pointers strictly based on flatLessons ordering
   const currentIndex = flatLessons.findIndex(
     (l) => l.id === activeLesson?.id && l.moduleSlug === moduleSlug,
   );
@@ -182,7 +209,6 @@ export function useLessonPlayer({
       ? flatLessons[currentIndex + 1]
       : null;
 
-  // Auto-scroll to top when lesson changes
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [lessonSlug, activeLesson?.id]);
@@ -191,22 +217,21 @@ export function useLessonPlayer({
     user,
     course,
     activeModule,
-    activeLesson,
+    activeLesson: fullLesson,
     blocks,
+    resources: contentResult?.resources ?? [],
     flatLessons,
     currentIndex,
     prevLesson,
     nextLesson,
     enrollment,
     isEnrolled,
-    isAdmin,
-    isOwnerInstructor,
     access,
     serverProgress,
     isServerProgressLoading,
     isServerProgressError,
     isCourseLoading,
-    isBlocksLoading,
+    isBlocksLoading: isContentLoading,
     isCourseError,
     isNotFound,
   };

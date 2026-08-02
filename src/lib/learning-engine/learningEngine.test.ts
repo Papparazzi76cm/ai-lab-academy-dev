@@ -155,9 +155,9 @@ describe("Learning Engine — Unlock Rules", () => {
 
   it("computes full access map for a course correctly", () => {
     const map = getLessonAccessMap(sampleCourse, {}, true);
-    expect(map["les-1"].canAccess).toBe(true);
-    expect(map["les-2"].canAccess).toBe(true);
-    expect(map["les-3"].canAccess).toBe(true);
+    expect(map["les-1"]?.canAccess).toBe(true);
+    expect(map["les-2"]?.canAccess).toBe(true);
+    expect(map["les-3"]?.canAccess).toBe(true);
   });
 });
 
@@ -184,9 +184,9 @@ describe("Learning Engine — Active Time Tracking", () => {
     }, 1000);
 
     tracker.start();
-    // Simulate long background sleep by manually hacking lastTick
+    // Simulate long background sleep by manually hacking startTime
     // @ts-expect-error accessing private property for test
-    tracker.lastTick = Date.now() - 3600 * 1000; // 1 hour ago
+    tracker.startTime = Date.now() - 3600 * 1000; // 1 hour ago
 
     tracker.pause(); // should cap at 120 seconds
     expect(totalFlushed).toBe(120);

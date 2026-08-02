@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 interface LessonCompletionButtonProps {
   isCompleted: boolean;
-  onToggle: () => Promise<boolean>;
+  onToggle: () => Promise<unknown>;
 }
 
 export function LessonCompletionButton({ isCompleted, onToggle }: LessonCompletionButtonProps) {

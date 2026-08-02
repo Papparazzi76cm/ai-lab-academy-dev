@@ -3,13 +3,13 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 
 interface LessonLockedProps {
-  reason?: string;
+  reason?: string | null | undefined;
   courseSlug: string;
-  requiredLessonSlug?: string;
-  requiredModuleSlug?: string;
-  requiredLessonTitle?: string;
-  requiredModuleTitle?: string;
-  isNotEnrolled?: boolean;
+  requiredLessonSlug?: string | undefined;
+  requiredModuleSlug?: string | undefined;
+  requiredLessonTitle?: string | undefined;
+  requiredModuleTitle?: string | undefined;
+  isNotEnrolled?: boolean | undefined;
 }
 
 export function LessonLocked({

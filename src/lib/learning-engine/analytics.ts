@@ -15,12 +15,17 @@ export async function recordLearningEvent(params: {
   if (!params.userId) return null;
 
   try {
-    const { data, error } = await supabase.rpc("record_learning_event_rpc", {
+    const { data, error } = await (
+      supabase.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>
+    )("record_learning_event_rpc", {
       p_event_type: params.eventType,
-      p_course_id: params.courseId || null,
-      p_module_id: params.moduleId || null,
-      p_lesson_id: params.lessonId || null,
-      p_metadata: params.metadata || {},
+      p_course_id: params.courseId ?? null,
+      p_module_id: params.moduleId ?? null,
+      p_lesson_id: params.lessonId ?? null,
+      p_metadata: params.metadata ?? {},
     });
 
     if (error) {
@@ -28,7 +33,7 @@ export async function recordLearningEvent(params: {
       return null;
     }
 
-    return data;
+    return (data as string) ?? null;
   } catch (err) {
     console.error("Failed to record learning event:", err);
     return null;

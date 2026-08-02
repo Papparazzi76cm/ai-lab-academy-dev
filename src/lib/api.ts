@@ -1,6 +1,45 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import type { LessonBlockItem } from "@/lib/blocks";
+
+export interface AccessibleLessonContentResult {
+  can_access: boolean;
+  reason?: string | null;
+  lesson?: {
+    id: string;
+    title: string;
+    slug: string;
+    description: string | null;
+    video_url: string | null;
+    duration_minutes: number | null;
+    position: number;
+    is_free_preview: boolean;
+    status: string;
+    course_id: string;
+    module_id: string;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  blocks?: LessonBlockItem[];
+  resources?: Array<{
+    id: string;
+    title: string;
+    url: string;
+    resource_type: string;
+    is_public: boolean;
+    course_id?: string;
+    lesson_id?: string;
+    created_at?: string;
+  }>;
+  progression?: {
+    status: string;
+    completed: boolean;
+    last_position: number;
+    seconds_spent: number;
+    completed_at: string | null;
+  };
+}
 
 export type Course = Tables<"courses">;
 export type Module = Tables<"modules">;
@@ -46,12 +85,31 @@ export const courseQuery = (slug: string) =>
       const { data, error } = await supabase
         .from("courses")
         .select(
-          "*, categories(name, slug), instructors(name, title, bio, avatar_url), modules(*, lessons(*)), faqs(*)",
+          "*, categories(name, slug), instructors(name, title, bio, avatar_url), modules(*, lessons(id, title, slug, position, duration_minutes, is_free_preview, status, course_id, module_id)), faqs(*)",
         )
         .eq("slug", slug)
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+export const accessibleLessonContentQuery = (lessonId: string | undefined) =>
+  queryOptions({
+    queryKey: ["accessible-lesson-content", lessonId],
+    enabled: Boolean(lessonId),
+    queryFn: async () => {
+      if (!lessonId) return null;
+      const { data, error } = await (
+        supabase.rpc as unknown as (
+          fn: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: unknown; error: unknown }>
+      )("get_accessible_lesson_content_rpc", {
+        p_lesson_id: lessonId,
+      });
+      if (error) throw error;
+      return data as unknown as AccessibleLessonContentResult;
     },
   });
 

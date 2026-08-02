@@ -2,11 +2,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useLessonProgress } from "./useLessonProgress";
-import { supabase } from "@/integrations/supabase/client";
+import { useLessonProgress, type ToggleCompletionResult } from "./useLessonProgress";
 import { toast } from "sonner";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
 
-let upsertResolverMap: Record<string, (val: { error: unknown }) => void> = {};
+let upsertResolverMap: Record<string, (val: { data?: unknown; error: unknown }) => void> = {};
 let activeUserId = "user-A";
 
 vi.mock("@/integrations/supabase/client", () => {
@@ -37,15 +38,26 @@ vi.mock("sonner", () => ({
 }));
 
 describe("useLessonProgress Concurrency & Identity Isolation", () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     upsertResolverMap = {};
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
   });
 
   afterEach(() => {
     localStorage.clear();
   });
+
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 
   it("Ignores late responses from User A after switching identity to User B", async () => {
     let currentProps = {
@@ -59,10 +71,11 @@ describe("useLessonProgress Concurrency & Identity Isolation", () => {
 
     const { result, rerender } = renderHook((props) => useLessonProgress(props), {
       initialProps: currentProps,
+      wrapper,
     });
 
     // 1. User A triggers toggleCompletion for lesson-1
-    let userAPromise: Promise<boolean>;
+    let userAPromise: Promise<ToggleCompletionResult>;
     act(() => {
       userAPromise = result.current.toggleCompletion("lesson-1");
     });
@@ -88,7 +101,7 @@ describe("useLessonProgress Concurrency & Identity Isolation", () => {
     expect(result.current.statuses["lesson-1"]).toBeUndefined();
 
     // 3. User B triggers toggleCompletion for lesson-2
-    let userBPromise: Promise<boolean>;
+    let userBPromise: Promise<ToggleCompletionResult>;
     act(() => {
       userBPromise = result.current.toggleCompletion("lesson-2");
     });
@@ -115,7 +128,10 @@ describe("useLessonProgress Concurrency & Identity Isolation", () => {
     // 6. User B's request resolves successfully
     await act(async () => {
       if (upsertResolverMap["user-B"]) {
-        upsertResolverMap["user-B"]({ error: null });
+        upsertResolverMap["user-B"]({
+          data: { is_course_completed: false, status: "completed" },
+          error: null,
+        });
       }
       await userBPromise;
     });

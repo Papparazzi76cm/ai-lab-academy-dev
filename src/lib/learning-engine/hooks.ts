@@ -110,8 +110,8 @@ export function useLearningProgress(
           courseId,
           lessonId: params.lessonId,
           currentlyCompleted,
-          courseTitle: params.courseTitle,
-          studentName: params.studentName,
+          ...(params.courseTitle ? { courseTitle: params.courseTitle } : {}),
+          ...(params.studentName ? { studentName: params.studentName } : {}),
         });
 
         // Concurrency guard check
@@ -127,7 +127,7 @@ export function useLearningProgress(
 
         return {
           success: true,
-          certificateDraft: result.certificateDraft,
+          certificateDraft: result.certificateDraft ?? null,
         };
       } catch (err) {
         // Rollback on failure
