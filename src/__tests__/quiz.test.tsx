@@ -8,11 +8,69 @@ import { QuizSubmitDialog } from "../components/quiz-player/QuizSubmitDialog";
 import { QuizResultView } from "../components/quiz-player/QuizResultView";
 import { QuizAnswerOption } from "../components/quiz-player/QuizAnswerOption";
 import { QuizStartScreen } from "../components/quiz-player/QuizStartScreen";
-import { StudentQuizQuestion, SubmitAttemptResult, Quiz } from "../lib/quiz/types";
+import {
+  StudentQuizQuestion,
+  StudentQuizAnswer,
+  AdminQuizAnswer,
+  SubmitAttemptResult,
+  Quiz,
+  QuestionResultDetail,
+} from "../lib/quiz/types";
 
-describe("Sprint 2.6 - Interactive Quiz System Tests", () => {
+describe("Sprint 2.6 - Interactive Quiz System & Type Safety Tests", () => {
   afterEach(() => {
     cleanup();
+  });
+
+  it("0. Compile-time & runtime type assertions for Quiz Types", () => {
+    // 1. StudentQuizAnswer does not contain is_correct
+    const studentAns: StudentQuizAnswer = {
+      id: "sa-1",
+      question_id: "q-1",
+      answer_text: "Opción Alumno",
+      position: 0,
+    };
+    expect((studentAns as Record<string, unknown>).is_correct).toBeUndefined();
+
+    // 2. StudentQuizQuestion does not contain explanation
+    const studentQ: StudentQuizQuestion = {
+      id: "sq-1",
+      quiz_id: "quiz-1",
+      type: "single_choice",
+      question_text: "Pregunta Alumno",
+      points: 1,
+      position: 0,
+      answers: [studentAns],
+    };
+    expect((studentQ as Record<string, unknown>).explanation).toBeUndefined();
+
+    // 3. AdminQuizAnswer accepts is_correct
+    const adminAns: AdminQuizAnswer = {
+      id: "aa-1",
+      question_id: "q-1",
+      answer_text: "Opción Admin",
+      is_correct: true,
+      position: 0,
+    };
+    expect(adminAns.is_correct).toBe(true);
+
+    // 4. QuestionResultDetail answers accepts is_correct as optional
+    const detailAns: QuestionResultDetail["answers"][number] = {
+      id: "da-1",
+      answer_text: "Opción Resultado",
+      position: 0,
+      selected: true,
+      is_correct: true,
+    };
+    expect(detailAns.is_correct).toBe(true);
+
+    const detailAnsNoCorrect: QuestionResultDetail["answers"][number] = {
+      id: "da-2",
+      answer_text: "Opción Sin Corregir",
+      position: 1,
+      selected: false,
+    };
+    expect(detailAnsNoCorrect.is_correct).toBeUndefined();
   });
   const sampleQuiz: Quiz = {
     id: "quiz-1",

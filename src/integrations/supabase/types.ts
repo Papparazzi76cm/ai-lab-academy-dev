@@ -938,32 +938,133 @@ export type Database = {
         };
         Relationships: [];
       };
+      quiz_answers: {
+        Row: {
+          answer_text: string;
+          created_at: string;
+          id: string;
+          is_correct: boolean;
+          position: number;
+          question_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          answer_text: string;
+          created_at?: string;
+          id?: string;
+          is_correct?: boolean;
+          position?: number;
+          question_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          answer_text?: string;
+          created_at?: string;
+          id?: string;
+          is_correct?: boolean;
+          position?: number;
+          question_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "quiz_answers_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "quiz_questions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      quiz_attempt_answers: {
+        Row: {
+          answered_at: string;
+          attempt_id: string;
+          id: string;
+          is_correct: boolean | null;
+          points_earned: number | null;
+          question_id: string;
+          selected_answer_ids: string[];
+        };
+        Insert: {
+          answered_at?: string;
+          attempt_id: string;
+          id?: string;
+          is_correct?: boolean | null;
+          points_earned?: number | null;
+          question_id: string;
+          selected_answer_ids: string[];
+        };
+        Update: {
+          answered_at?: string;
+          attempt_id?: string;
+          id?: string;
+          is_correct?: boolean | null;
+          points_earned?: number | null;
+          question_id?: string;
+          selected_answer_ids?: string[];
+        };
+        Relationships: [];
+      };
       quiz_attempts: {
         Row: {
           answers: Json;
+          attempt_number: number;
           created_at: string;
+          earned_points: number;
+          expires_at: string | null;
           id: string;
           passed: boolean;
+          percentage: number;
           quiz_id: string;
           score: number;
+          shuffled_answer_ids_map: Json | null;
+          shuffled_question_ids: string[] | null;
+          started_at: string;
+          status: "in_progress" | "submitted" | "expired" | "cancelled";
+          submitted_at: string | null;
+          total_points: number;
+          updated_at: string;
           user_id: string;
         };
         Insert: {
           answers?: Json;
+          attempt_number?: number;
           created_at?: string;
+          earned_points?: number;
+          expires_at?: string | null;
           id?: string;
           passed?: boolean;
+          percentage?: number;
           quiz_id: string;
           score?: number;
+          shuffled_answer_ids_map?: Json | null;
+          shuffled_question_ids?: string[] | null;
+          started_at?: string;
+          status?: "in_progress" | "submitted" | "expired" | "cancelled";
+          submitted_at?: string | null;
+          total_points?: number;
+          updated_at?: string;
           user_id: string;
         };
         Update: {
           answers?: Json;
+          attempt_number?: number;
           created_at?: string;
+          earned_points?: number;
+          expires_at?: string | null;
           id?: string;
           passed?: boolean;
+          percentage?: number;
           quiz_id?: string;
           score?: number;
+          shuffled_answer_ids_map?: Json | null;
+          shuffled_question_ids?: string[] | null;
+          started_at?: string;
+          status?: "in_progress" | "submitted" | "expired" | "cancelled";
+          submitted_at?: string | null;
+          total_points?: number;
+          updated_at?: string;
           user_id?: string;
         };
         Relationships: [
@@ -1266,6 +1367,38 @@ export type Database = {
           p_metadata?: Json;
         };
         Returns: string;
+      };
+      publish_quiz_rpc: {
+        Args: {
+          p_quiz_id: string;
+        };
+        Returns: Json;
+      };
+      get_quiz_statistics_rpc: {
+        Args: {
+          p_quiz_id: string;
+        };
+        Returns: Json;
+      };
+      start_quiz_attempt_rpc: {
+        Args: {
+          p_quiz_id: string;
+        };
+        Returns: Json;
+      };
+      save_quiz_answer_rpc: {
+        Args: {
+          p_attempt_id: string;
+          p_question_id: string;
+          p_selected_answer_ids: string[];
+        };
+        Returns: Json;
+      };
+      submit_quiz_attempt_rpc: {
+        Args: {
+          p_attempt_id: string;
+        };
+        Returns: Json;
       };
     };
     Enums: {

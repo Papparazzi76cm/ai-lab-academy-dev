@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,7 +51,7 @@ export function QuestionEditorModal({
     reset,
     formState: { errors },
   } = useForm<QuizQuestionFormValues>({
-    resolver: zodResolver(QuizQuestionSchema) as any,
+    resolver: zodResolver(QuizQuestionSchema),
     defaultValues: {
       type: "single_choice",
       question_text: "",
@@ -136,10 +135,7 @@ export function QuestionEditorModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          onSubmit={handleSubmit((data) => onSubmit(data as QuizQuestionFormValues))}
-          className="space-y-5 py-2"
-        >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 py-2">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2 sm:col-span-2">
               <Label>Tipo de Pregunta</Label>
@@ -187,8 +183,8 @@ export function QuestionEditorModal({
 
           <QuizAnswerEditor
             questionType={questionType}
-            answers={answers as any}
-            onAnswersChange={(newAnswers) => setValue("answers", newAnswers as any)}
+            answers={answers}
+            onAnswersChange={(newAnswers) => setValue("answers", newAnswers)}
           />
 
           <div className="space-y-2">

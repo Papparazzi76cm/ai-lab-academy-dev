@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, Link } from "@tanstack/react-router";
@@ -40,10 +39,10 @@ export function QuizEditor({ quizId }: { quizId: string }) {
   const saveSettingsMutation = useMutation({
     mutationFn: async (values: QuizSettingsFormValues) => {
       if (isNew) {
-        const created = await createQuiz(values as any);
+        const created = await createQuiz(values);
         return created;
       } else {
-        const updated = await updateQuiz(quizId, values as any);
+        const updated = await updateQuiz(quizId, values);
         return updated;
       }
     },
@@ -59,7 +58,7 @@ export function QuizEditor({ quizId }: { quizId: string }) {
   });
 
   const saveQuestionMutation = useMutation({
-    mutationFn: (qData: QuizQuestionFormValues) => saveQuestionWithAnswers(quizId, qData as any),
+    mutationFn: (qData: QuizQuestionFormValues) => saveQuestionWithAnswers(quizId, qData),
     onSuccess: () => {
       toast.success("Pregunta guardada");
       queryClient.invalidateQueries({ queryKey: ["quiz-detail", quizId] });
@@ -86,7 +85,7 @@ export function QuizEditor({ quizId }: { quizId: string }) {
           explanation: q.explanation || "",
           points: q.points,
           position: q.position,
-          answers: (q.answers || []) as any,
+          answers: q.answers || [],
         });
       }
     },

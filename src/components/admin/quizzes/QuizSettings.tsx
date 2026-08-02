@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,7 +34,7 @@ export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
     watch,
     formState: { errors },
   } = useForm<QuizSettingsFormValues>({
-    resolver: zodResolver(QuizSettingsSchema) as any,
+    resolver: zodResolver(QuizSettingsSchema),
     defaultValues: {
       title: quiz?.title || "Nuevo Cuestionario",
       description: quiz?.description || "",
@@ -82,10 +81,7 @@ export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
   });
 
   return (
-    <form
-      onSubmit={handleSubmit((data) => onSave(data as QuizSettingsFormValues))}
-      className="space-y-6"
-    >
+    <form onSubmit={handleSubmit((data) => onSave(data))} className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Configuración General</CardTitle>

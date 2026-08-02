@@ -1,13 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
-import { QuizAnswer, QuestionType } from "@/lib/quiz/types";
+import { QuestionType } from "@/lib/quiz/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
 interface QuizAnswerOptionProps {
   type: QuestionType;
-  answers: Array<{ id: string; answer_text: string; [key: string]: any }>;
+  answers: Array<{ id: string; answer_text: string; position?: number }>;
   selectedIds: string[];
   onChange: (selectedIds: string[]) => void;
 }

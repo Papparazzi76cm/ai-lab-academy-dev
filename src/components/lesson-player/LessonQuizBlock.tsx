@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,7 +5,7 @@ import { Quiz, QuizAttempt } from "@/lib/quiz/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { HelpCircle, CheckCircle2, Clock, Play, Award, AlertCircle } from "lucide-react";
+import { HelpCircle, CheckCircle2, Clock, Play, Award } from "lucide-react";
 import { QuizPlayer } from "@/components/quiz-player/QuizPlayer";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -15,14 +14,14 @@ interface LessonQuizBlockProps {
   courseSlug: string;
 }
 
-export function LessonQuizBlock({ lessonId, courseSlug }: LessonQuizBlockProps) {
+export function LessonQuizBlock({ lessonId }: LessonQuizBlockProps) {
   const [playerOpen, setPlayerOpen] = useState(false);
 
   // Fetch quiz for this lesson
   const { data: quiz, isLoading: isQuizLoading } = useQuery({
     queryKey: ["lesson-quiz", lessonId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("quizzes")
         .select("*")
         .eq("lesson_id", lessonId)
@@ -39,7 +38,7 @@ export function LessonQuizBlock({ lessonId, courseSlug }: LessonQuizBlockProps) 
     queryKey: ["lesson-quiz-attempts", quiz?.id],
     enabled: !!quiz?.id,
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("quiz_attempts")
         .select("*")
         .eq("quiz_id", quiz!.id)
