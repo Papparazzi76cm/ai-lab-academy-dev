@@ -1400,6 +1400,31 @@ export type Database = {
         };
         Returns: Json;
       };
+      issue_course_certificate_rpc: {
+        Args: {
+          p_course_id: string;
+        };
+        Returns: Json;
+      };
+      verify_certificate_rpc: {
+        Args: {
+          p_verification_code: string;
+        };
+        Returns: Json;
+      };
+      revoke_certificate_rpc: {
+        Args: {
+          p_certificate_id: string;
+          p_reason: string;
+        };
+        Returns: Json;
+      };
+      reissue_certificate_rpc: {
+        Args: {
+          p_certificate_id: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       app_role: "admin" | "instructor" | "student";

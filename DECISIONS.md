@@ -48,6 +48,33 @@
 - **Decision**: Implemented strict RLS on `public.quiz_answers` allowing read access to `is_correct` strictly for course instructors and admins (`private.is_course_instructor()`). Created `start_quiz_attempt_rpc` which strips out `is_correct` flags before returning question JSON to the browser.
 - **Justification**: Eliminates answer leak vulnerabilities, guaranteeing that evaluation integrity is strictly maintained by the database server.
 
+## Sprint 2.7 — Certificados, Credenciales y Verificación Pública
+
+### Decision 1: Immutable Snapshot Pattern for Certificate Credentials
+
+- **Context**: Student names or course titles can change in the future (e.g. course rebranding, profile updates).
+- **Decision**: Stored `student_name_snapshot`, `course_title_snapshot`, and `instructor_name_snapshot` directly in the `public.certificates` table at the moment of issuance.
+- **Justification**: Guarantees historical credential integrity. A certificate issued in 2026 remains accurate to the student's legal name and course title at that exact moment, preventing retroactive modification.
+
+### Decision 2: Learning Engine Authority & Server-Enforced Progress (100%)
+
+- **Context**: Client applications could attempt to invoke certificate issuance endpoints prematurely.
+- **Decision**: Enforced that `public.issue_course_certificate_rpc` checks `course_progress.percentage = 100` directly on the PostgreSQL server inside a transactional lock before issuing any certificate.
+- **Justification**: Ensures frontend code cannot override completion requirements or bypass mandatory quiz evaluations.
+
+### Decision 3: Public Verification Privacy Firewall
+
+- **Context**: Verification endpoints must allow external third parties (employers, recruiters) to verify credentials without authenticating, but must protect student privacy.
+- **Decision**: Created `public.verify_certificate_rpc` returning ONLY non-sensitive public metadata (`found`, `status`, `certificate_number`, `student_name`, `course_title`, `issued_at`, `completed_at`, `issuer`, `revocation_reason_public`).
+- **Justification**: Protects student personal data (no email, UUIDs, quiz scores, or internal storage paths exposed) while fulfilling verification needs.
+
+### Decision 4: Decoupled PDF Generation with Private Bucket Storage & Signed URLs
+
+- **Context**: Generating PDFs solely in client browsers allows canvas manipulation, while storing public PDF files exposes credentials to unauthorized scraping.
+- **Decision**: Created server-decoupled PDF generation module (`jspdf` + `qrcode`) that uploads generated PDFs to the private `certificates` bucket in Supabase Storage and returns short-lived signed URLs for downloads.
+- **Justification**: Protects certificate documents behind RLS and signed access tokens while avoiding heavy browser execution overhead.
+
+
 ### Decision 2: Transactional Server-Side Grading via RPC (`submit_quiz_attempt_rpc`)
 
 - **Context**: Grading quizzes client-side allows tampering with final scores, while multi-query server grading creates race conditions or partial updates.
