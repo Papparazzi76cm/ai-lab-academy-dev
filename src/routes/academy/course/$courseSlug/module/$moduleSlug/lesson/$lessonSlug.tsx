@@ -113,7 +113,7 @@ function LessonPlayerPage() {
     (requiredModuleItem ? slugify(requiredModuleItem.title) || requiredModuleItem.id : undefined);
 
   // 5. Loading skeleton state
-  if (isCourseLoading || (activeLesson && access?.canAccess && isBlocksLoading)) {
+  if (isCourseLoading || (activeLesson && isBlocksLoading)) {
     return <LessonPlayerSkeleton />;
   }
 

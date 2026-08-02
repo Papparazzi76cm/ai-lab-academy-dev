@@ -20,8 +20,7 @@ export type SafeLessonMetadata = Pick<
   | "status"
   | "course_id"
   | "module_id"
-> &
-  Partial<Tables<"lessons">>;
+>;
 
 export type CourseModuleWithLessons = Tables<"modules"> & {
   lessons?: SafeLessonMetadata[] | null;

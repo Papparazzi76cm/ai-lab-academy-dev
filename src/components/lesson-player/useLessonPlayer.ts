@@ -131,14 +131,11 @@ export function useLessonPlayer({ courseSlug, moduleSlug, lessonSlug }: UseLesso
   // 7. Secure RPC Query: Sole authority for video_url, lesson_blocks, resources, and server authorization
   const { data: contentResult, isLoading: isContentLoading } = useQuery({
     ...accessibleLessonContentQuery(activeLesson?.id),
-    enabled: Boolean(activeLesson?.id) && clientAccessCheck.canAccess,
+    enabled: Boolean(activeLesson?.id),
   });
 
   // Access status strictly driven by server RPC result when available
   const access = useMemo(() => {
-    if (!clientAccessCheck.canAccess) {
-      return clientAccessCheck;
-    }
     if (contentResult) {
       if (!contentResult.can_access) {
         return {

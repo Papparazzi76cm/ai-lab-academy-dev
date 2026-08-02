@@ -154,4 +154,57 @@ describe("Sprint 2.5 Security Patch - Lesson Player Assertions", () => {
     expect(result.current.blocks).toHaveLength(1);
     expect(result.current.blocks[0]?.id).toBe("b1");
   });
+
+  it("permite acceso a administrador no inscrito si el servidor RPC lo autoriza", async () => {
+    const { result } = renderHook(
+      () =>
+        useLessonPlayer({
+          courseSlug: "test-course",
+          moduleSlug: "mod-1",
+          lessonSlug: "les-1",
+        }),
+      { wrapper },
+    );
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(result.current.access.canAccess).toBe(true);
+    expect((result.current.activeLesson as Record<string, unknown> | null)?.["video_url"]).toBe(
+      "https://youtube.com/embed/test",
+    );
+  });
+
+  it("permite acceso a instructor propietario no inscrito si la RPC devuelve can_access = true", async () => {
+    const { result } = renderHook(
+      () =>
+        useLessonPlayer({
+          courseSlug: "test-course",
+          moduleSlug: "mod-1",
+          lessonSlug: "les-1",
+        }),
+      { wrapper },
+    );
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(result.current.access.canAccess).toBe(true);
+    expect(result.current.blocks).toHaveLength(1);
+  });
+
+  it("deniega acceso a alumno bloqueado y recibe can_access = false de la RPC", async () => {
+    const { result } = renderHook(
+      () =>
+        useLessonPlayer({
+          courseSlug: "test-course",
+          moduleSlug: "mod-1",
+          lessonSlug: "les-2",
+        }),
+      { wrapper },
+    );
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(result.current.access.canAccess).toBe(false);
+    expect(result.current.blocks).toEqual([]);
+  });
 });
