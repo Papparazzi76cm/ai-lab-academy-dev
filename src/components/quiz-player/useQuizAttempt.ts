@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Quiz,
@@ -51,16 +51,28 @@ export function useQuizAttempt(quizId: string, onComplete?: (result: SubmitAttem
     (a) => a.quiz_id === quizId && a.status === "in_progress",
   );
 
+  const isStartingRef = useRef(false);
+
   // Start attempt mutation (explicit start)
   const startAttemptMutation = useMutation({
-    mutationFn: () => startQuizAttemptRpc(quizId),
+    mutationFn: () => {
+      isStartingRef.current = true;
+      return startQuizAttemptRpc(quizId);
+    },
     onSuccess: (data: StartAttemptPayload) => {
+      isStartingRef.current = false;
       setHasStarted(true);
       if (data.selected_answers) {
         setUserAnswers(data.selected_answers);
       }
+      if (typeof data.current_question_index === "number" && data.current_question_index >= 0) {
+        setCurrentIndex(data.current_question_index);
+      }
     },
-    onError: (err: Error) => toast.error(`Error al iniciar cuestionario: ${err.message}`),
+    onError: (err: Error) => {
+      isStartingRef.current = false;
+      toast.error(`Error al iniciar cuestionario: ${err.message}`);
+    },
   });
 
   const attemptData = startAttemptMutation.data;
@@ -138,7 +150,11 @@ export function useQuizAttempt(quizId: string, onComplete?: (result: SubmitAttem
     setCurrentIndex,
     userAnswers,
     hasStarted,
-    startAttempt: () => startAttemptMutation.mutate(),
+    startAttempt: () => {
+      if (isStartingRef.current || startAttemptMutation.isPending || hasStarted) return;
+      isStartingRef.current = true;
+      startAttemptMutation.mutate();
+    },
     isStarting: startAttemptMutation.isPending,
     hasActiveAttempt: !!activeAttempt,
     completedAttemptsCount,

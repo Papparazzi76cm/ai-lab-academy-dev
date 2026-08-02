@@ -1,5 +1,5 @@
 import React from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { QuizSettingsSchema, QuizSettingsFormValues, Quiz } from "@/lib/quiz/types";
@@ -34,7 +34,7 @@ export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
     watch,
     formState: { errors },
   } = useForm<QuizSettingsFormValues>({
-    resolver: zodResolver(QuizSettingsSchema),
+    resolver: zodResolver(QuizSettingsSchema) as unknown as Resolver<QuizSettingsFormValues>,
     defaultValues: {
       title: quiz?.title || "Nuevo Cuestionario",
       description: quiz?.description || "",

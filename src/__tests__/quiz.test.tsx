@@ -30,7 +30,7 @@ describe("Sprint 2.6 - Interactive Quiz System & Type Safety Tests", () => {
       answer_text: "Opción Alumno",
       position: 0,
     };
-    expect((studentAns as Record<string, unknown>).is_correct).toBeUndefined();
+    expect((studentAns as unknown as Record<string, unknown>)["is_correct"]).toBeUndefined();
 
     // 2. StudentQuizQuestion does not contain explanation
     const studentQ: StudentQuizQuestion = {
@@ -42,7 +42,7 @@ describe("Sprint 2.6 - Interactive Quiz System & Type Safety Tests", () => {
       position: 0,
       answers: [studentAns],
     };
-    expect((studentQ as Record<string, unknown>).explanation).toBeUndefined();
+    expect((studentQ as unknown as Record<string, unknown>)["explanation"]).toBeUndefined();
 
     // 3. AdminQuizAnswer accepts is_correct
     const adminAns: AdminQuizAnswer = {

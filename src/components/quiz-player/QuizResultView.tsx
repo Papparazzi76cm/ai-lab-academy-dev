@@ -47,12 +47,16 @@ export function QuizResultView({
                   : "bg-destructive/10 text-destructive border-destructive/30"
               }`}
             >
-              {result.passed ? "¡Cuestionario Aprobado!" : "Cuestionario No Aprobado"}
+              {result.status === "expired"
+                ? "Tiempo Agotado"
+                : result.passed
+                  ? "¡Cuestionario Aprobado!"
+                  : "Cuestionario No Aprobado"}
             </Badge>
             <h2 className="text-4xl font-extrabold tracking-tight mt-2">{result.score}%</h2>
             <p className="text-xs text-muted-foreground">
-              Obtuviste {result.earned_points} de {result.total_points} puntos (Mínimo para aprobar:{" "}
-              {result.passing_score}%)
+              {result.reason ||
+                `Obtuviste ${result.earned_points} de ${result.total_points} puntos (Mínimo para aprobar: ${result.passing_score}%)`}
             </p>
           </div>
 

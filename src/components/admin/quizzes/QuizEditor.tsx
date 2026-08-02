@@ -17,7 +17,13 @@ import {
 import { QuizSettings } from "./QuizSettings";
 import { QuestionList } from "./QuestionList";
 import { QuizPreviewModal } from "./QuizPreviewModal";
-import { QuizQuestionFormValues, QuizSettingsFormValues, QuizQuestion } from "@/lib/quiz/types";
+import {
+  QuizQuestionFormValues,
+  QuizSettingsFormValues,
+  QuizQuestion,
+  Quiz,
+  QuizAnswer,
+} from "@/lib/quiz/types";
 
 export function QuizEditor({ quizId }: { quizId: string }) {
   const navigate = useNavigate();
@@ -39,10 +45,10 @@ export function QuizEditor({ quizId }: { quizId: string }) {
   const saveSettingsMutation = useMutation({
     mutationFn: async (values: QuizSettingsFormValues) => {
       if (isNew) {
-        const created = await createQuiz(values);
+        const created = await createQuiz(values as unknown as Partial<Quiz>);
         return created;
       } else {
-        const updated = await updateQuiz(quizId, values);
+        const updated = await updateQuiz(quizId, values as unknown as Partial<Quiz>);
         return updated;
       }
     },
@@ -58,7 +64,11 @@ export function QuizEditor({ quizId }: { quizId: string }) {
   });
 
   const saveQuestionMutation = useMutation({
-    mutationFn: (qData: QuizQuestionFormValues) => saveQuestionWithAnswers(quizId, qData),
+    mutationFn: (qData: QuizQuestionFormValues) =>
+      saveQuestionWithAnswers(
+        quizId,
+        qData as unknown as Partial<QuizQuestion> & { answers: Partial<QuizAnswer>[] },
+      ),
     onSuccess: () => {
       toast.success("Pregunta guardada");
       queryClient.invalidateQueries({ queryKey: ["quiz-detail", quizId] });

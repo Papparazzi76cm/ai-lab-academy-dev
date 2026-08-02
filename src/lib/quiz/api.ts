@@ -11,11 +11,16 @@ import {
 
 // CMS API FUNCTIONS
 
+// Helper to query tables without exactOptionalPropertyTypes issues
+function dbFrom(table: "quizzes" | "quiz_questions" | "quiz_answers" | "quiz_attempts") {
+  return (supabase.from as unknown as (t: string) => ReturnType<typeof supabase.from>)(table);
+}
+
 export async function fetchQuizzes(params?: {
   courseId?: string;
   status?: string;
 }): Promise<Quiz[]> {
-  let query = supabase.from("quizzes").select("*").order("created_at", { ascending: false });
+  let query = dbFrom("quizzes").select("*").order("created_at", { ascending: false });
 
   if (params?.courseId) {
     query = query.eq("course_id", params.courseId);
@@ -32,8 +37,7 @@ export async function fetchQuizzes(params?: {
 export async function fetchQuizDetail(
   quizId: string,
 ): Promise<{ quiz: Quiz; questions: QuizQuestion[] }> {
-  const { data: quizData, error: quizError } = await supabase
-    .from("quizzes")
+  const { data: quizData, error: quizError } = await dbFrom("quizzes")
     .select("*")
     .eq("id", quizId)
     .single();
@@ -74,8 +78,7 @@ export async function fetchQuizDetail(
 }
 
 export async function createQuiz(payload: Partial<Quiz>): Promise<Quiz> {
-  const { data, error } = await supabase
-    .from("quizzes")
+  const { data, error } = await dbFrom("quizzes")
     .insert([
       {
         course_id: payload.course_id,
@@ -102,8 +105,7 @@ export async function createQuiz(payload: Partial<Quiz>): Promise<Quiz> {
 }
 
 export async function updateQuiz(quizId: string, payload: Partial<Quiz>): Promise<Quiz> {
-  const { data, error } = await supabase
-    .from("quizzes")
+  const { data, error } = await dbFrom("quizzes")
     .update({
       ...payload,
       updated_at: new Date().toISOString(),
@@ -117,7 +119,7 @@ export async function updateQuiz(quizId: string, payload: Partial<Quiz>): Promis
 }
 
 export async function deleteQuiz(quizId: string): Promise<void> {
-  const { error } = await supabase.from("quizzes").delete().eq("id", quizId);
+  const { error } = await dbFrom("quizzes").delete().eq("id", quizId);
   if (error) throw new Error(error.message);
 }
 
@@ -175,7 +177,7 @@ export async function saveQuestionWithAnswers(
       .update({
         type: question.type as unknown as
           "single" | "multiple" | "boolean" | "order" | "match" | "short",
-        prompt: question.question_text,
+        prompt: question.question_text || "",
         explanation: question.explanation || null,
         points: question.points ?? 1,
         position: question.position ?? 0,

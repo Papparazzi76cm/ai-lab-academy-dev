@@ -21,8 +21,9 @@ export function LessonQuizBlock({ lessonId }: LessonQuizBlockProps) {
   const { data: quiz, isLoading: isQuizLoading } = useQuery({
     queryKey: ["lesson-quiz", lessonId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("quizzes")
+      const { data, error } = await (
+        supabase.from as unknown as (t: string) => ReturnType<typeof supabase.from>
+      )("quizzes")
         .select("*")
         .eq("lesson_id", lessonId)
         .eq("status", "published")

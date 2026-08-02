@@ -116,6 +116,7 @@ export interface StartAttemptPayload {
   quiz: Quiz;
   questions: StudentQuizQuestion[];
   selected_answers?: Record<string, string[]>;
+  current_question_index?: number;
 }
 
 export interface QuestionResultDetail {
