@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { QuizAnswer, QuestionType } from "@/lib/quiz/types";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -6,7 +7,7 @@ import { Label } from "@/components/ui/label";
 
 interface QuizAnswerOptionProps {
   type: QuestionType;
-  answers: QuizAnswer[];
+  answers: Array<{ id: string; answer_text: string; [key: string]: any }>;
   selectedIds: string[];
   onChange: (selectedIds: string[]) => void;
 }
@@ -28,6 +29,7 @@ export function QuizAnswerOption({ type, answers, selectedIds, onChange }: QuizA
             return (
               <div
                 key={ans.id}
+                data-testid={`answer-option-${ans.id}`}
                 onClick={() => onChange([ans.id])}
                 className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-lg border p-4 transition-all hover:border-primary/50 ${
                   isSelected

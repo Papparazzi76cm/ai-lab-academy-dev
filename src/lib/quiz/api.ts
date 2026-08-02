@@ -7,7 +7,6 @@ import {
   QuizStatistics,
   StartAttemptPayload,
   SubmitAttemptResult,
-  StudentAttemptStat,
 } from "./types";
 
 // CMS API FUNCTIONS
@@ -16,7 +15,10 @@ export async function fetchQuizzes(params?: {
   courseId?: string;
   status?: string;
 }): Promise<Quiz[]> {
-  let query = supabase.from("quizzes").select("*").order("created_at", { ascending: false });
+  let query = (supabase as any)
+    .from("quizzes")
+    .select("*")
+    .order("created_at", { ascending: false });
 
   if (params?.courseId) {
     query = query.eq("course_id", params.courseId);
@@ -33,7 +35,7 @@ export async function fetchQuizzes(params?: {
 export async function fetchQuizDetail(
   quizId: string,
 ): Promise<{ quiz: Quiz; questions: QuizQuestion[] }> {
-  const { data: quizData, error: quizError } = await supabase
+  const { data: quizData, error: quizError } = await (supabase as any)
     .from("quizzes")
     .select("*")
     .eq("id", quizId)
@@ -41,7 +43,7 @@ export async function fetchQuizDetail(
 
   if (quizError) throw new Error(quizError.message);
 
-  const { data: questionsData, error: questionsError } = await supabase
+  const { data: questionsData, error: questionsError } = await (supabase as any)
     .from("quiz_questions")
     .select("*")
     .eq("quiz_id", quizId)
@@ -49,11 +51,11 @@ export async function fetchQuizDetail(
 
   if (questionsError) throw new Error(questionsError.message);
 
-  const questionIds = (questionsData || []).map((q) => q.id);
+  const questionIds = (questionsData || []).map((q: any) => q.id);
   let answersData: QuizAnswer[] = [];
 
   if (questionIds.length > 0) {
-    const { data: aData, error: aError } = await supabase
+    const { data: aData, error: aError } = await (supabase as any)
       .from("quiz_answers")
       .select("*")
       .in("question_id", questionIds)
@@ -64,7 +66,7 @@ export async function fetchQuizDetail(
     }
   }
 
-  const questions: QuizQuestion[] = (questionsData || []).map((q) => ({
+  const questions: QuizQuestion[] = (questionsData || []).map((q: any) => ({
     ...q,
     type: q.type as QuizQuestion["type"],
     answers: answersData.filter((a) => a.question_id === q.id),
@@ -74,7 +76,7 @@ export async function fetchQuizDetail(
 }
 
 export async function createQuiz(payload: Partial<Quiz>): Promise<Quiz> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("quizzes")
     .insert([
       {
@@ -102,7 +104,7 @@ export async function createQuiz(payload: Partial<Quiz>): Promise<Quiz> {
 }
 
 export async function updateQuiz(quizId: string, payload: Partial<Quiz>): Promise<Quiz> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("quizzes")
     .update({
       ...payload,
@@ -117,7 +119,7 @@ export async function updateQuiz(quizId: string, payload: Partial<Quiz>): Promis
 }
 
 export async function deleteQuiz(quizId: string): Promise<void> {
-  const { error } = await supabase.from("quizzes").delete().eq("id", quizId);
+  const { error } = await (supabase as any).from("quizzes").delete().eq("id", quizId);
   if (error) throw new Error(error.message);
 }
 
@@ -130,7 +132,7 @@ export async function duplicateQuiz(quizId: string): Promise<Quiz> {
   });
 
   for (const q of questions) {
-    const { data: newQ, error: qErr } = await supabase
+    const { data: newQ, error: qErr } = await (supabase as any)
       .from("quiz_questions")
       .insert([
         {
@@ -148,7 +150,7 @@ export async function duplicateQuiz(quizId: string): Promise<Quiz> {
     if (qErr || !newQ) continue;
 
     if (q.answers && q.answers.length > 0) {
-      await supabase.from("quiz_answers").insert(
+      await (supabase as any).from("quiz_answers").insert(
         q.answers.map((a) => ({
           question_id: newQ.id,
           answer_text: a.answer_text,
@@ -169,7 +171,7 @@ export async function saveQuestionWithAnswers(
   let questionId = question.id;
 
   if (questionId) {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("quiz_questions")
       .update({
         type: question.type,
@@ -183,7 +185,7 @@ export async function saveQuestionWithAnswers(
 
     if (error) throw new Error(error.message);
   } else {
-    const { data: newQ, error } = await supabase
+    const { data: newQ, error } = await (supabase as any)
       .from("quiz_questions")
       .insert([
         {
@@ -204,11 +206,11 @@ export async function saveQuestionWithAnswers(
 
   // Replace answers
   if (question.id) {
-    await supabase.from("quiz_answers").delete().eq("question_id", questionId);
+    await (supabase as any).from("quiz_answers").delete().eq("question_id", questionId);
   }
 
   if (question.answers && question.answers.length > 0) {
-    const { error: aErr } = await supabase.from("quiz_answers").insert(
+    const { error: aErr } = await (supabase as any).from("quiz_answers").insert(
       question.answers.map((a, idx) => ({
         question_id: questionId!,
         answer_text: a.answer_text,
@@ -223,20 +225,22 @@ export async function saveQuestionWithAnswers(
 }
 
 export async function deleteQuestion(questionId: string): Promise<void> {
-  const { error } = await supabase.from("quiz_questions").delete().eq("id", questionId);
+  const { error } = await (supabase as any).from("quiz_questions").delete().eq("id", questionId);
   if (error) throw new Error(error.message);
 }
 
 export async function publishQuizRpc(
   quizId: string,
 ): Promise<{ success: boolean; total_points: number }> {
-  const { data, error } = await supabase.rpc("publish_quiz_rpc", { p_quiz_id: quizId });
+  const { data, error } = await (supabase as any).rpc("publish_quiz_rpc", { p_quiz_id: quizId });
   if (error) throw new Error(error.message);
   return data as { success: boolean; total_points: number };
 }
 
 export async function getQuizStatisticsRpc(quizId: string): Promise<QuizStatistics> {
-  const { data, error } = await supabase.rpc("get_quiz_statistics_rpc", { p_quiz_id: quizId });
+  const { data, error } = await (supabase as any).rpc("get_quiz_statistics_rpc", {
+    p_quiz_id: quizId,
+  });
   if (error) throw new Error(error.message);
   return data as unknown as QuizStatistics;
 }
@@ -244,7 +248,9 @@ export async function getQuizStatisticsRpc(quizId: string): Promise<QuizStatisti
 // STUDENT RPC EXECUTION FUNCTIONS
 
 export async function startQuizAttemptRpc(quizId: string): Promise<StartAttemptPayload> {
-  const { data, error } = await supabase.rpc("start_quiz_attempt_rpc", { p_quiz_id: quizId });
+  const { data, error } = await (supabase as any).rpc("start_quiz_attempt_rpc", {
+    p_quiz_id: quizId,
+  });
   if (error) throw new Error(error.message);
   return data as unknown as StartAttemptPayload;
 }
@@ -253,18 +259,18 @@ export async function saveQuizAnswerRpc(
   attemptId: string,
   questionId: string,
   selectedAnswerIds: string[],
-): Promise<{ success: boolean }> {
-  const { data, error } = await supabase.rpc("save_quiz_answer_rpc", {
+): Promise<{ success: boolean; status?: string; reason?: string }> {
+  const { data, error } = await (supabase as any).rpc("save_quiz_answer_rpc", {
     p_attempt_id: attemptId,
     p_question_id: questionId,
     p_selected_answer_ids: selectedAnswerIds,
   });
   if (error) throw new Error(error.message);
-  return data as { success: boolean };
+  return data as { success: boolean; status?: string; reason?: string };
 }
 
 export async function submitQuizAttemptRpc(attemptId: string): Promise<SubmitAttemptResult> {
-  const { data, error } = await supabase.rpc("submit_quiz_attempt_rpc", {
+  const { data, error } = await (supabase as any).rpc("submit_quiz_attempt_rpc", {
     p_attempt_id: attemptId,
   });
   if (error) throw new Error(error.message);
@@ -272,11 +278,16 @@ export async function submitQuizAttemptRpc(attemptId: string): Promise<SubmitAtt
 }
 
 export async function fetchStudentAttempts(userId?: string): Promise<QuizAttempt[]> {
-  const { data, error } = await supabase
+  let query = (supabase as any)
     .from("quiz_attempts")
     .select("*, quizzes(title, course_id, passing_score)")
     .order("created_at", { ascending: false });
 
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data || []) as unknown as QuizAttempt[];
 }

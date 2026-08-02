@@ -10,7 +10,7 @@ interface QuizResultViewProps {
   attemptsHistory?: QuizAttempt[];
   maxAttempts?: number | null;
   onRetry?: () => void;
-  onContinue?: () => void;
+  onContinue?: (() => void) | undefined;
 }
 
 export function QuizResultView({

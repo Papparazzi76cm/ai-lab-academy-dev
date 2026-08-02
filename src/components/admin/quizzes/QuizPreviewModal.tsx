@@ -170,6 +170,10 @@ export function QuizPreviewModal({ open, onOpenChange, quiz, questions }: QuizPr
               </Button>
             </div>
           </div>
+        ) : !currentQuestion ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            No hay preguntas en este cuestionario.
+          </div>
         ) : (
           <div className="space-y-6 py-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground border-b pb-3">

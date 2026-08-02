@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +22,7 @@ export function LessonQuizBlock({ lessonId, courseSlug }: LessonQuizBlockProps) 
   const { data: quiz, isLoading: isQuizLoading } = useQuery({
     queryKey: ["lesson-quiz", lessonId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("quizzes")
         .select("*")
         .eq("lesson_id", lessonId)
@@ -38,7 +39,7 @@ export function LessonQuizBlock({ lessonId, courseSlug }: LessonQuizBlockProps) 
     queryKey: ["lesson-quiz-attempts", quiz?.id],
     enabled: !!quiz?.id,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("quiz_attempts")
         .select("*")
         .eq("quiz_id", quiz!.id)

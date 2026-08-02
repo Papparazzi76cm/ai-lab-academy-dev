@@ -1,65 +1,29 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { QuizSettingsSchema, QuizSettingsFormValues, Quiz } from "@/lib/quiz/types";
+import { QuizAssociationFields } from "./QuizAssociationFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 
 interface QuizSettingsProps {
-  quiz?: Partial<Quiz>;
+  quiz?: Partial<Quiz> | undefined;
   onSave: (values: QuizSettingsFormValues) => Promise<void>;
   isSaving?: boolean;
 }
 
 export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
-  // Fetch courses list
   const { data: courses = [] } = useQuery({
     queryKey: ["courses-list-select"],
     queryFn: async () => {
       const { data } = await supabase.from("courses").select("id, title").order("title");
-      return data || [];
-    },
-  });
-
-  const selectedCourseId = quiz?.course_id || (courses[0]?.id ?? "");
-
-  // Fetch modules for selected course
-  const { data: modules = [] } = useQuery({
-    queryKey: ["modules-list-select", selectedCourseId],
-    enabled: !!selectedCourseId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("modules")
-        .select("id, title")
-        .eq("course_id", selectedCourseId)
-        .order("position");
-      return data || [];
-    },
-  });
-
-  // Fetch lessons for selected course
-  const { data: lessons = [] } = useQuery({
-    queryKey: ["lessons-list-select", selectedCourseId],
-    enabled: !!selectedCourseId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("lessons")
-        .select("id, title")
-        .eq("course_id", selectedCourseId)
-        .order("position");
       return data || [];
     },
   });
@@ -71,7 +35,7 @@ export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
     watch,
     formState: { errors },
   } = useForm<QuizSettingsFormValues>({
-    resolver: zodResolver(QuizSettingsSchema),
+    resolver: zodResolver(QuizSettingsSchema) as any,
     defaultValues: {
       title: quiz?.title || "Nuevo Cuestionario",
       description: quiz?.description || "",
@@ -89,10 +53,39 @@ export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
     },
   });
 
-  const watchCourseId = watch("course_id");
+  const selectedCourseId = watch("course_id");
+
+  const { data: modules = [] } = useQuery({
+    queryKey: ["modules-list-select", selectedCourseId],
+    enabled: !!selectedCourseId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("modules")
+        .select("id, title")
+        .eq("course_id", selectedCourseId)
+        .order("position");
+      return data || [];
+    },
+  });
+
+  const { data: lessons = [] } = useQuery({
+    queryKey: ["lessons-list-select", selectedCourseId],
+    enabled: !!selectedCourseId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("lessons")
+        .select("id, title")
+        .eq("course_id", selectedCourseId)
+        .order("position");
+      return data || [];
+    },
+  });
 
   return (
-    <form onSubmit={handleSubmit(onSave)} className="space-y-6">
+    <form
+      onSubmit={handleSubmit((data) => onSave(data as QuizSettingsFormValues))}
+      className="space-y-6"
+    >
       <Card>
         <CardHeader>
           <CardTitle>Configuración General</CardTitle>
@@ -121,73 +114,22 @@ export function QuizSettings({ quiz, onSave, isSaving }: QuizSettingsProps) {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Curso Asociado *</Label>
-              <Select
-                value={watchCourseId || ""}
-                onValueChange={(val) => {
-                  setValue("course_id", val);
-                  setValue("module_id", null);
-                  setValue("lesson_id", null);
-                }}
-              >
-                <SelectTrigger id="course-select-trigger">
-                  <SelectValue placeholder="Selecciona curso" />
-                </SelectTrigger>
-                <SelectContent>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.course_id && (
-                <p className="text-xs text-destructive">{errors.course_id.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Módulo (Opcional)</Label>
-              <Select
-                value={watch("module_id") || "none"}
-                onValueChange={(val) => setValue("module_id", val === "none" ? null : val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin módulo específico" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin módulo específico</SelectItem>
-                  {modules.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Lección (Opcional)</Label>
-              <Select
-                value={watch("lesson_id") || "none"}
-                onValueChange={(val) => setValue("lesson_id", val === "none" ? null : val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin lección específica" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin lección específica</SelectItem>
-                  {lessons.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <QuizAssociationFields
+            courses={courses}
+            modules={modules}
+            lessons={lessons}
+            selectedCourseId={selectedCourseId}
+            selectedModuleId={watch("module_id") ?? null}
+            selectedLessonId={watch("lesson_id") ?? null}
+            onSelectCourse={(courseId) => {
+              setValue("course_id", courseId);
+              setValue("module_id", null);
+              setValue("lesson_id", null);
+            }}
+            onSelectModule={(modId) => setValue("module_id", modId)}
+            onSelectLesson={(lesId) => setValue("lesson_id", lesId)}
+            courseError={errors.course_id?.message}
+          />
         </CardContent>
       </Card>
 

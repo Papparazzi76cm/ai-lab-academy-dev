@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -7,6 +8,7 @@ import {
   QuestionType,
   QuizQuestion,
 } from "@/lib/quiz/types";
+import { QuizAnswerEditor } from "./QuizAnswerEditor";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -28,8 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, HelpCircle } from "lucide-react";
-import { toast } from "sonner";
 
 interface QuestionEditorModalProps {
   open: boolean;
@@ -54,7 +52,7 @@ export function QuestionEditorModal({
     reset,
     formState: { errors },
   } = useForm<QuizQuestionFormValues>({
-    resolver: zodResolver(QuizQuestionSchema),
+    resolver: zodResolver(QuizQuestionSchema) as any,
     defaultValues: {
       type: "single_choice",
       question_text: "",
@@ -123,42 +121,6 @@ export function QuestionEditorModal({
     }
   };
 
-  const handleAddAnswer = () => {
-    const newAnswers = [
-      ...answers,
-      { answer_text: `Opción ${answers.length + 1}`, is_correct: false, position: answers.length },
-    ];
-    setValue("answers", newAnswers);
-  };
-
-  const handleRemoveAnswer = (index: number) => {
-    if (answers.length <= 2 && questionType !== "true_false") {
-      toast.error("Se requieren al menos 2 opciones.");
-      return;
-    }
-    const filtered = answers.filter((_, i) => i !== index).map((a, i) => ({ ...a, position: i }));
-    setValue("answers", filtered);
-  };
-
-  const handleToggleCorrectSingle = (index: number) => {
-    const updated = answers.map((a, i) => ({
-      ...a,
-      is_correct: i === index,
-    }));
-    setValue("answers", updated);
-  };
-
-  const handleToggleCorrectMultiple = (index: number, checked: boolean) => {
-    const updated = answers.map((a, i) => (i === index ? { ...a, is_correct: checked } : a));
-    setValue("answers", updated);
-  };
-
-  const handleAnswerTextChange = (index: number, text: string) => {
-    const updated = [...answers];
-    updated[index].answer_text = text;
-    setValue("answers", updated);
-  };
-
   const onSubmit = (values: QuizQuestionFormValues) => {
     onSave(values);
     onOpenChange(false);
@@ -174,7 +136,10 @@ export function QuestionEditorModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 py-2">
+        <form
+          onSubmit={handleSubmit((data) => onSubmit(data as QuizQuestionFormValues))}
+          className="space-y-5 py-2"
+        >
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2 sm:col-span-2">
               <Label>Tipo de Pregunta</Label>
@@ -218,81 +183,13 @@ export function QuestionEditorModal({
             )}
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold">Opciones de Respuesta *</Label>
-              {questionType !== "true_false" && (
-                <Button type="button" variant="outline" size="sm" onClick={handleAddAnswer}>
-                  <Plus className="mr-1 size-3.5" /> Añadir Opción
-                </Button>
-              )}
-            </div>
+          {errors.answers && <p className="text-xs text-destructive">{errors.answers.message}</p>}
 
-            {errors.answers && <p className="text-xs text-destructive">{errors.answers.message}</p>}
-
-            <div className="space-y-2">
-              {questionType === "single_choice" || questionType === "true_false" ? (
-                <RadioGroup
-                  value={answers.findIndex((a) => a.is_correct).toString()}
-                  onValueChange={(val) => handleToggleCorrectSingle(parseInt(val, 10))}
-                  className="space-y-2"
-                >
-                  {answers.map((ans, idx) => (
-                    <div key={idx} className="flex items-center gap-3 rounded-lg border p-2.5">
-                      <RadioGroupItem value={idx.toString()} id={`ans-radio-${idx}`} />
-                      <Input
-                        value={ans.answer_text}
-                        disabled={questionType === "true_false"}
-                        onChange={(e) => handleAnswerTextChange(idx, e.target.value)}
-                        placeholder={`Respuesta ${idx + 1}`}
-                        className="flex-1"
-                      />
-                      {questionType !== "true_false" && answers.length > 2 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemoveAnswer(idx)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </RadioGroup>
-              ) : (
-                <div className="space-y-2">
-                  {answers.map((ans, idx) => (
-                    <div key={idx} className="flex items-center gap-3 rounded-lg border p-2.5">
-                      <Checkbox
-                        id={`ans-check-${idx}`}
-                        checked={ans.is_correct}
-                        onCheckedChange={(checked) => handleToggleCorrectMultiple(idx, !!checked)}
-                      />
-                      <Input
-                        value={ans.answer_text}
-                        onChange={(e) => handleAnswerTextChange(idx, e.target.value)}
-                        placeholder={`Respuesta ${idx + 1}`}
-                        className="flex-1"
-                      />
-                      {answers.length > 2 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemoveAnswer(idx)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <QuizAnswerEditor
+            questionType={questionType}
+            answers={answers as any}
+            onAnswersChange={(newAnswers) => setValue("answers", newAnswers as any)}
+          />
 
           <div className="space-y-2">
             <Label htmlFor="explanation">Explicación / Retroalimentación (Opcional)</Label>

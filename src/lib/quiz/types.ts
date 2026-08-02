@@ -31,17 +31,38 @@ export interface Quiz {
   lesson_title?: string;
 }
 
-export interface QuizAnswer {
+// Student Answer representation (Strictly DOES NOT expose is_correct)
+export interface StudentQuizAnswer {
   id: string;
   question_id: string;
   answer_text: string;
-  is_correct?: boolean;
+  position: number;
+}
+
+// Student Question representation (Strictly DOES NOT expose explanation or correct answers)
+export interface StudentQuizQuestion {
+  id: string;
+  quiz_id: string;
+  type: QuestionType;
+  question_text: string;
+  points: number;
+  position: number;
+  answers: StudentQuizAnswer[];
+}
+
+// Admin Answer representation (Includes is_correct for instructor/CMS authoring)
+export interface AdminQuizAnswer {
+  id: string;
+  question_id: string;
+  answer_text: string;
+  is_correct: boolean;
   position: number;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface QuizQuestion {
+// Admin Question representation
+export interface AdminQuizQuestion {
   id: string;
   quiz_id: string;
   type: QuestionType;
@@ -51,10 +72,14 @@ export interface QuizQuestion {
   position: number;
   required?: boolean;
   settings_json?: Record<string, unknown>;
-  answers?: QuizAnswer[];
+  answers?: AdminQuizAnswer[];
   created_at?: string;
   updated_at?: string;
 }
+
+// Alias for generic quiz answer / question in admin CMS
+export type QuizAnswer = AdminQuizAnswer;
+export type QuizQuestion = AdminQuizQuestion;
 
 export interface QuizAttempt {
   id: string;
@@ -70,6 +95,8 @@ export interface QuizAttempt {
   passed: boolean;
   total_points: number;
   earned_points: number;
+  shuffled_question_ids?: string[] | null;
+  shuffled_answer_ids_map?: Record<string, string[]> | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,7 +114,8 @@ export interface QuizAttemptAnswer {
 export interface StartAttemptPayload {
   attempt: QuizAttempt;
   quiz: Quiz;
-  questions: QuizQuestion[];
+  questions: StudentQuizQuestion[];
+  selected_answers?: Record<string, string[]>;
 }
 
 export interface QuestionResultDetail {
@@ -109,6 +137,8 @@ export interface QuestionResultDetail {
 
 export interface SubmitAttemptResult {
   success: boolean;
+  status?: AttemptStatus;
+  reason?: string;
   attempt_id: string;
   passed: boolean;
   score: number;
@@ -219,6 +249,14 @@ export const QuizQuestionSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Debe haber al menos 1 respuesta correcta.",
+          path: ["answers"],
+        });
+      }
+      const incorrectCount = data.answers.filter((a) => !a.is_correct).length;
+      if (incorrectCount < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Una pregunta de opción múltiple debe tener al menos 1 respuesta incorrecta.",
           path: ["answers"],
         });
       }

@@ -1,10 +1,10 @@
 import React from "react";
-import { QuizQuestion as IQuizQuestion } from "@/lib/quiz/types";
+import { QuizQuestion as IQuizQuestion, StudentQuizQuestion } from "@/lib/quiz/types";
 import { Badge } from "@/components/ui/badge";
 import { QuizAnswerOption } from "./QuizAnswerOption";
 
 interface QuizQuestionProps {
-  question: IQuizQuestion;
+  question: IQuizQuestion | StudentQuizQuestion;
   questionNumber: number;
   totalQuestions: number;
   selectedAnswerIds: string[];
