@@ -39,3 +39,23 @@
 - **Context**: Rendering raw user-provided `video_url` strings directly in `<iframe>` elements introduces security risks (XSS, clickjacking, dangerous protocols).
 - **Decision**: Routed all video URLs through `getSafeVideoEmbedUrl()` in `src/lib/url-security.ts`, normalizing YouTube (`youtube-nocookie.com`) and Vimeo (`player.vimeo.com`), and validating hostnames against explicit domain allowlists before setting iframe source attributes with `loading="lazy"` and `referrerPolicy="strict-origin-when-cross-origin"`.
 - **Justification**: Prevents unauthorized domain embeds and protects user privacy.
+
+## Sprint 2.6 — Quizzes Interactivos y Evaluación
+
+### Decision 1: Strict Server-Side Truth & Client Obfuscation (`is_correct`)
+
+- **Context**: Including `is_correct` flags or correct answer keys in client-side state enables students to inspect network payloads or DOM attributes to cheat on evaluations.
+- **Decision**: Implemented strict RLS on `public.quiz_answers` allowing read access to `is_correct` strictly for course instructors and admins (`private.is_course_instructor()`). Created `start_quiz_attempt_rpc` which strips out `is_correct` flags before returning question JSON to the browser.
+- **Justification**: Eliminates answer leak vulnerabilities, guaranteeing that evaluation integrity is strictly maintained by the database server.
+
+### Decision 2: Transactional Server-Side Grading via RPC (`submit_quiz_attempt_rpc`)
+
+- **Context**: Grading quizzes client-side allows tampering with final scores, while multi-query server grading creates race conditions or partial updates.
+- **Decision**: Built `submit_quiz_attempt_rpc` as a transactional SQL function that evaluates student answers, calculates score percentages against quiz passing rules, updates the attempt record status to `submitted`, and triggers lesson/course progress synchronization in a single ACID transaction.
+- **Justification**: Ensures atomic evaluation, consistent score calculation (exact matches for multiple choice), and instant progress updates without race conditions.
+
+### Decision 3: Server-Synced Attempt Expiration & Real-Time Auto-Save Strategy
+
+- **Context**: Long-running quiz attempts with timer limits can drift across client devices or be lost if the user closes their browser before submitting.
+- **Decision**: Stored `expires_at` timestamps on `public.quiz_attempts` calculated server-side upon attempt creation (`start_quiz_attempt_rpc`). Created `save_quiz_answer_rpc` to auto-save selected options continuously during the quiz. Enforced auto-submission upon expiration both in the UI timer and during server grading.
+- **Justification**: Prevents timer manipulation by altering client clock time and guarantees zero data loss if a browser tab is accidentally reloaded or closed.

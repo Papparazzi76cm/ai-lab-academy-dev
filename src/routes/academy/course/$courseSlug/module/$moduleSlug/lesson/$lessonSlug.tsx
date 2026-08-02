@@ -11,6 +11,7 @@ import { LessonPlayerSkeleton } from "@/components/lesson-player/LessonPlayerSke
 import { MobileCourseSidebar } from "@/components/lesson-player/MobileCourseSidebar";
 import { CourseCompletionModal } from "@/components/lesson-player/CourseCompletionModal";
 import { LessonLocked } from "@/components/lesson-player/LessonLocked";
+import { LessonQuizBlock } from "@/components/lesson-player/LessonQuizBlock";
 import { useLessonPlayer } from "@/components/lesson-player/useLessonPlayer";
 import { useLessonProgress } from "@/components/lesson-player/useLessonProgress";
 import { useTimeTracking } from "@/lib/learning-engine/hooks";
@@ -190,7 +191,10 @@ function LessonPlayerPage() {
                 isNotEnrolled={!isEnrolled && !activeLesson.is_free_preview}
               />
             ) : (
-              <LessonRenderer lesson={activeLesson} blocks={blocks} />
+              <>
+                <LessonRenderer lesson={activeLesson} blocks={blocks} />
+                <LessonQuizBlock lessonId={activeLesson.id} courseSlug={course.slug} />
+              </>
             )}
 
             {/* Bottom Controls: Navigation + Toggle Completion */}

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { BookOpen, FolderTree, LayoutDashboard, Users } from "lucide-react";
+import { BookOpen, FolderTree, HelpCircle, LayoutDashboard, Users } from "lucide-react";
 import { RequireRole } from "@/components/auth/RouteGuard";
 import { PageShell } from "@/components/layout/PageShell";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/admin")({
 const navItems = [
   { to: "/admin", label: "Resumen", icon: LayoutDashboard, exact: true },
   { to: "/admin/courses", label: "Cursos", icon: BookOpen },
+  { to: "/admin/quizzes", label: "Cuestionarios", icon: HelpCircle },
   { to: "/admin/categories", label: "Categorías", icon: FolderTree, adminOnly: true },
   { to: "/admin/instructors", label: "Profesores", icon: Users, adminOnly: true },
 ] as const;
