@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { AuthoringBlock, BlockType, Visibility, LessonVersion } from "../types";
 import { useHistory } from "../history/useHistory";
 import { useAutosave } from "../autosave/useAutosave";
@@ -59,8 +59,7 @@ export function LessonEditor({
 
   const {
     status: autosaveStatus,
-    lastSavedAt,
-    saveNow,
+    isDirty,
     flushPendingSave,
     conflictMessage,
   } = useAutosave(lessonId, blocks, revision, setRevision);
@@ -77,6 +76,19 @@ export function LessonEditor({
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId) || null;
   const validation = validateLesson(blocks);
+
+  // Flush pending saves before closing tab/window if dirty
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        flushPendingSave();
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty, flushPendingSave]);
 
   const handleTogglePreview = async () => {
     if (!isPreview) {
@@ -107,7 +119,7 @@ export function LessonEditor({
       b.id === blockId
         ? {
             ...b,
-            visibility: (newSettings.visibility as Visibility) || b.visibility,
+            visibility: (newSettings["visibility"] as Visibility) || b.visibility,
             settings_json: { ...b.settings_json, ...newSettings },
           }
         : b,
@@ -118,7 +130,9 @@ export function LessonEditor({
   const handleDuplicate = (blockId: string) => {
     const targetIndex = blocks.findIndex((b) => b.id === blockId);
     if (targetIndex < 0) return;
-    const duplicated = duplicateBlock(blocks[targetIndex]);
+    const targetBlock = blocks[targetIndex];
+    if (!targetBlock) return;
+    const duplicated = duplicateBlock(targetBlock);
     const updated = [
       ...blocks.slice(0, targetIndex + 1),
       duplicated,
@@ -184,6 +198,7 @@ export function LessonEditor({
     )
       return;
     try {
+      await flushPendingSave();
       await restoreLessonVersion(lessonId, versionNumber);
       const res = await fetchLessonVersions(lessonId);
       setVersions(res.versions);
@@ -291,7 +306,7 @@ export function LessonEditor({
               id: b.id,
               lesson_id: lessonId,
               position: b.position,
-              type: b.type,
+              type: b.type as any,
               content_json: b.content_json,
               settings_json: b.settings_json,
             }))}

@@ -13,7 +13,7 @@ export async function publishLesson(
   lessonId: string,
   commitMessage?: string,
 ): Promise<PublishResult> {
-  const { data, error } = await supabase.rpc("publish_lesson_rpc", {
+  const { data, error } = await (supabase.rpc as any)("publish_lesson_rpc", {
     p_lesson_id: lessonId,
     p_commit_message: commitMessage || null,
   });
@@ -43,7 +43,7 @@ export async function fetchLessonVersions(
   limit: number = 10,
   offset: number = 0,
 ): Promise<{ total: number; versions: LessonVersion[] }> {
-  const { data, error } = await supabase.rpc("get_lesson_versions_rpc", {
+  const { data, error } = await (supabase.rpc as any)("get_lesson_versions_rpc", {
     p_lesson_id: lessonId,
     p_limit: limit,
     p_offset: offset,
@@ -51,7 +51,7 @@ export async function fetchLessonVersions(
 
   if (error) {
     console.error("Error fetching lesson versions via RPC, falling back to direct query:", error);
-    const { data: fallbackData, error: fallbackErr } = await supabase
+    const { data: fallbackData, error: fallbackErr } = await (supabase as any)
       .from("lesson_versions")
       .select("*")
       .eq("lesson_id", lessonId)
@@ -59,20 +59,22 @@ export async function fetchLessonVersions(
 
     if (fallbackErr) return { total: 0, versions: [] };
 
-    const mapped = (fallbackData || []).map((v) => ({
-      id: v.id,
-      lesson_id: v.lesson_id,
-      version_number: v.version_number,
-      blocks_snapshot: (v.blocks_snapshot as unknown as AuthoringBlock[]) || [],
-      commit_message: v.commit_message,
-      published_by: v.published_by,
-      created_at: v.created_at,
-    }));
+    const mapped: LessonVersion[] = ((fallbackData as Record<string, unknown>[]) || []).map(
+      (v) => ({
+        id: String(v["id"] || ""),
+        lesson_id: String(v["lesson_id"] || ""),
+        version_number: Number(v["version_number"] || 1),
+        blocks_snapshot: (v["blocks_snapshot"] as unknown as AuthoringBlock[]) || [],
+        commit_message: (v["commit_message"] as string) || null,
+        published_by: (v["published_by"] as string) || null,
+        created_at: String(v["created_at"] || new Date().toISOString()),
+      }),
+    );
 
     return { total: mapped.length, versions: mapped };
   }
 
-  const payload = data as { total: number; versions: LessonVersion[] };
+  const payload = data as unknown as { total: number; versions: LessonVersion[] };
   return {
     total: payload?.total || 0,
     versions: payload?.versions || [],
@@ -80,7 +82,7 @@ export async function fetchLessonVersions(
 }
 
 export async function restoreLessonVersion(lessonId: string, versionNumber: number) {
-  const { data, error } = await supabase.rpc("restore_lesson_version_rpc", {
+  const { data, error } = await (supabase.rpc as any)("restore_lesson_version_rpc", {
     p_lesson_id: lessonId,
     p_version_number: versionNumber,
   });

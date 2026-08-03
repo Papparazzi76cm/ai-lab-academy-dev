@@ -9,7 +9,11 @@ export function BlockPreview({ blocks }: { blocks: LessonBlockItem[] }) {
           Vista previa para el estudiante
         </span>
       </div>
-      <BlockRenderer blocks={blocks} />
+      <div className="space-y-6">
+        {blocks.map((block) => (
+          <BlockRenderer key={block.id} block={block} />
+        ))}
+      </div>
     </div>
   );
 }

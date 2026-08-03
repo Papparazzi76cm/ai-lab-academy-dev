@@ -68,6 +68,7 @@ export interface AuthoringBlock {
   type: BlockType;
   position: number;
   visibility: Visibility;
+  schema_version?: number;
   settings_json: AuthoringBlockSettings;
   content_json: Record<string, unknown>;
   created_at?: string;

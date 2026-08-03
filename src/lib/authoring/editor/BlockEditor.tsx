@@ -1,15 +1,7 @@
 import React from "react";
 import type { AuthoringBlock } from "../types";
 import { BlockRegistry } from "../blocks/registry";
-import {
-  GripVertical,
-  EyeOff,
-  Copy,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
-  SlidersHorizontal,
-} from "lucide-react";
+import { GripVertical, EyeOff, Copy, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface BlockEditorProps {
@@ -49,7 +41,7 @@ export function BlockEditor({
     );
   }
 
-  const EditorComponent = def.editor;
+  const EditorComponent = def.editor as React.ComponentType<any>;
   const validationResult = def.validator.safeParse(block.content_json);
   const hasError = !validationResult.success;
 
@@ -137,8 +129,12 @@ export function BlockEditor({
           block={block}
           content={block.content_json}
           settings={block.settings_json}
-          onChangeContent={(partial) => onChangeContent({ ...block.content_json, ...partial })}
-          onChangeSettings={(partial) => onChangeSettings({ ...block.settings_json, ...partial })}
+          onChangeContent={(partial: Record<string, unknown>) =>
+            onChangeContent({ ...block.content_json, ...partial })
+          }
+          onChangeSettings={(partial: Record<string, unknown>) =>
+            onChangeSettings({ ...block.settings_json, ...partial })
+          }
         />
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React from "react";
-import type { AuthoringBlock, AuthoringBlockSettings } from "../types";
+import type { AuthoringBlock, AuthoringBlockSettings, Visibility } from "../types";
 import { BlockRegistry } from "../blocks/registry";
 import {
   Select,
@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Sliders, Eye, AlertCircle, Trash2, Copy, ArrowUp, ArrowDown } from "lucide-react";
+import { Sliders, AlertCircle, Trash2, Copy, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PropertiesPanelProps {
@@ -108,8 +108,8 @@ export function PropertiesPanel({
           </label>
           <Select
             value={selectedBlock.visibility || "visible"}
-            onValueChange={(val: Visibility) =>
-              onChangeSettings(selectedBlock.id, { visibility: val })
+            onValueChange={(val: string) =>
+              onChangeSettings(selectedBlock.id, { visibility: val as Visibility })
             }
           >
             <SelectTrigger>
@@ -117,7 +117,7 @@ export function PropertiesPanel({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="visible">Público / Visible</SelectItem>
-              <SelectItem value="hidden font-medium">Oculto (Borrador)</SelectItem>
+              <SelectItem value="hidden">Oculto (Borrador)</SelectItem>
               <SelectItem value="instructor_only">Solo Instructores</SelectItem>
             </SelectContent>
           </Select>
@@ -129,8 +129,10 @@ export function PropertiesPanel({
           </label>
           <Select
             value={settings.paddingY || "medium"}
-            onValueChange={(val: AuthoringBlockSettings["paddingY"]) =>
-              onChangeSettings(selectedBlock.id, { paddingY: val })
+            onValueChange={(val: string) =>
+              onChangeSettings(selectedBlock.id, {
+                paddingY: val as "none" | "small" | "medium" | "large",
+              })
             }
           >
             <SelectTrigger>

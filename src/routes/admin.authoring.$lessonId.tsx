@@ -23,7 +23,7 @@ function AuthoringStudioRoute() {
   const { data: lessonData, isLoading: isLessonLoading } = useQuery({
     queryKey: ["authoring-lesson", lessonId],
     queryFn: async () => {
-      const { data: lesson, error: lErr } = await supabase
+      const { data: lesson, error: lErr } = await (supabase as any)
         .from("lessons")
         .select("id, title, course_id, revision")
         .eq("id", lessonId)
@@ -44,7 +44,7 @@ function AuthoringStudioRoute() {
       return {
         lesson,
         blocks: adapted,
-        revision: lesson.revision ? Number(lesson.revision) : 1,
+        revision: lesson?.revision ? Number(lesson.revision) : 1,
       };
     },
   });

@@ -60,7 +60,9 @@ export function OutlinePanel({
                 <span className="truncate flex-1">{def?.name || block.type}</span>
 
                 {block.visibility === "hidden" && (
-                  <EyeOff className="size-3.5 text-muted-foreground" title="Oculto" />
+                  <span title="Oculto">
+                    <EyeOff className="size-3.5 text-muted-foreground" />
+                  </span>
                 )}
 
                 <Button

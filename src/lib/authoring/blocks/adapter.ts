@@ -9,7 +9,30 @@ export function isValidUUID(id: string): boolean {
 }
 
 /**
- * Maps legacy/alias block types to their canonical BlockType.
+ * Generates a deterministic UUID v4/v5 format string from an arbitrary text seed.
+ */
+export function generateDeterministicUUID(seed: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x097c1fda;
+  for (let i = 0; i < seed.length; i++) {
+    const code = seed.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 0x01000193);
+    h2 = Math.imul(h2 ^ code, 0x050c5f1d);
+  }
+  const hex1 = (h1 >>> 0).toString(16).padStart(8, "0");
+  const hex2 = (h2 >>> 0).toString(16).padStart(8, "0");
+  const hex3 = Math.abs(h1 ^ h2)
+    .toString(16)
+    .padStart(8, "0");
+  const hex4 = Math.abs(h1 + h2)
+    .toString(16)
+    .padStart(8, "0");
+
+  return `${hex1}-${hex2.slice(0, 4)}-4${hex2.slice(4, 7)}-a${hex3.slice(0, 3)}-${hex3.slice(3, 7)}${hex4.slice(0, 8)}`;
+}
+
+/**
+ * Maps legacy/alias block types to their canonical BlockType without breaking callout semantics.
  */
 export function normalizeBlockType(type: string): BlockType {
   const lowercase = (type || "").toLowerCase().trim();
@@ -23,7 +46,7 @@ export function normalizeBlockType(type: string): BlockType {
     case "list":
       return "bullet_list";
     case "callout":
-      return "warning";
+      return "callout"; // Preserves callout semantics explicitly
     case "video_file":
       return "video";
     case "file_download":
@@ -44,11 +67,13 @@ export function normalizeBlockType(type: string): BlockType {
  */
 export function adaptRawBlock(raw: unknown, positionIndex: number): AuthoringBlock {
   if (!raw || typeof raw !== "object") {
+    const fallbackSeed = `raw_fallback_${positionIndex}_${String(raw || "")}`;
     return {
-      id: crypto.randomUUID(),
+      id: generateDeterministicUUID(fallbackSeed),
       type: "paragraph",
       position: positionIndex,
       visibility: "visible",
+      schema_version: 1,
       content_json: { text: String(raw || "") },
       settings_json: { visibility: "visible" },
     };
@@ -56,17 +81,39 @@ export function adaptRawBlock(raw: unknown, positionIndex: number): AuthoringBlo
 
   const record = raw as Record<string, unknown>;
 
-  // Ensure stable UUID identifier
-  const rawId = String(record.id || "").trim();
-  const id = isValidUUID(rawId) ? rawId : crypto.randomUUID();
+  // Ensure deterministic, stable UUID identifier for legacy blocks
+  const rawId = String(record["id"] || "").trim();
+  let id: string;
+  if (isValidUUID(rawId)) {
+    id = rawId;
+  } else if (rawId !== "") {
+    id = generateDeterministicUUID(`legacy_id:${rawId}`);
+  } else {
+    const seed = `legacy_pos:${String(record["lesson_id"] || "")}:${positionIndex}:${JSON.stringify(record["content_json"] || record["content"] || {})}`;
+    id = generateDeterministicUUID(seed);
+  }
 
   // Normalize block type
-  const rawType = String(record.type || "paragraph");
+  const rawType = String(record["type"] || "paragraph");
   const canonicalType = normalizeBlockType(rawType);
 
   // Extract raw content and settings
-  let contentJson = (record.content_json || record.content || {}) as Record<string, unknown>;
-  let settingsJson = (record.settings_json || record.settings || {}) as Record<string, unknown>;
+  let contentJson = (record["content_json"] || record["content"] || {}) as Record<string, unknown>;
+  let settingsJson = (record["settings_json"] || record["settings"] || {}) as Record<
+    string,
+    unknown
+  >;
+
+  // Normalize variant explicitly for callouts / alerts
+  if (canonicalType === "callout" || canonicalType === "warning") {
+    const rawVariant = String(
+      contentJson["variant"] || contentJson["type"] || "info",
+    ).toLowerCase();
+    const validVariant = ["info", "warning", "success", "danger"].includes(rawVariant)
+      ? rawVariant
+      : "info";
+    contentJson = { ...contentJson, variant: validVariant };
+  }
 
   // Check if registry definition provides migration/normalization logic
   const definition = BlockRegistry.get(canonicalType) || BlockRegistry.get(rawType as BlockType);
@@ -79,21 +126,32 @@ export function adaptRawBlock(raw: unknown, positionIndex: number): AuthoringBlo
   }
 
   // Ensure valid visibility property
-  const rawVisibility = String(settingsJson.visibility || record.visibility || "visible");
+  const rawVisibility = String(settingsJson["visibility"] || record["visibility"] || "visible");
   const visibility: Visibility =
     rawVisibility === "hidden" || rawVisibility === "instructor_only" ? rawVisibility : "visible";
 
-  return {
+  const block: AuthoringBlock = {
     id,
-    lesson_id: typeof record.lesson_id === "string" ? record.lesson_id : undefined,
     type: canonicalType,
-    position: typeof record.position === "number" ? record.position : positionIndex,
+    position:
+      typeof record["position"] === "number" ? (record["position"] as number) : positionIndex,
     visibility,
+    schema_version: 1,
     content_json: contentJson,
     settings_json: { ...settingsJson, visibility },
-    created_at: typeof record.created_at === "string" ? record.created_at : undefined,
-    updated_at: typeof record.updated_at === "string" ? record.updated_at : undefined,
   };
+
+  if (typeof record["lesson_id"] === "string") {
+    block.lesson_id = record["lesson_id"] as string;
+  }
+  if (typeof record["created_at"] === "string") {
+    block.created_at = record["created_at"] as string;
+  }
+  if (typeof record["updated_at"] === "string") {
+    block.updated_at = record["updated_at"] as string;
+  }
+
+  return block;
 }
 
 /**

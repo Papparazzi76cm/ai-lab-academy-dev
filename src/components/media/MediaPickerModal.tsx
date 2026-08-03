@@ -143,7 +143,7 @@ export function MediaPickerModal({
     onSelect({
       url: sanitized,
       alt: altText.trim(),
-      filename: sanitized.split("/").pop(),
+      filename: sanitized.split("/").pop() || "",
     });
 
     onOpenChange(false);

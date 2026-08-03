@@ -1,6 +1,6 @@
 import type { AuthoringBlock, BlockType, AuthoringBlockSettings } from "../types";
 
-export const DEFAULT_BLOCK_CONTENTS: Record<BlockType, Record<string, unknown>> = {
+export const DEFAULT_BLOCK_CONTENTS: Partial<Record<BlockType, Record<string, unknown>>> = {
   heading: { text: "Nuevo Título", level: 2, alignment: "left" },
   paragraph: { text: "Escribe aquí el contenido del párrafo...", alignment: "left" },
   image: {
@@ -127,7 +127,7 @@ export function createBlock(
       ...initialSettings,
     },
     content_json: {
-      ...DEFAULT_BLOCK_CONTENTS[type],
+      ...(DEFAULT_BLOCK_CONTENTS[type] || {}),
       ...initialContent,
     },
     created_at: new Date().toISOString(),
@@ -166,7 +166,9 @@ export function moveBlock(
   }
   const result = [...blocks];
   const [removed] = result.splice(fromIndex, 1);
-  result.splice(toIndex, 0, removed);
+  if (removed) {
+    result.splice(toIndex, 0, removed);
+  }
 
   return result.map((b, idx) => ({ ...b, position: idx }));
 }

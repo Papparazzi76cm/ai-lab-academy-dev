@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   DndContext,
   closestCenter,
@@ -168,8 +168,10 @@ export function CourseEditor({
       const newIndex = modules.findIndex((m) => m.id === over.id);
       const reordered = [...modules];
       const [moved] = reordered.splice(oldIndex, 1);
-      reordered.splice(newIndex, 0, moved);
-      onReorderModules(reordered.map((m) => m.id));
+      if (moved) {
+        reordered.splice(newIndex, 0, moved);
+        onReorderModules(reordered.map((m) => m.id));
+      }
     }
   };
 

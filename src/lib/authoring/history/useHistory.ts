@@ -35,6 +35,7 @@ export function useHistory(initialBlocks: AuthoringBlock[]) {
     setHistory((prev) => {
       if (prev.past.length === 0) return prev;
       const previous = prev.past[prev.past.length - 1];
+      if (!previous) return prev;
       const newPast = prev.past.slice(0, prev.past.length - 1);
       return {
         past: newPast,
@@ -48,6 +49,7 @@ export function useHistory(initialBlocks: AuthoringBlock[]) {
     setHistory((prev) => {
       if (prev.future.length === 0) return prev;
       const next = prev.future[0];
+      if (!next) return prev;
       const newFuture = prev.future.slice(1);
       return {
         past: [...prev.past, prev.present],

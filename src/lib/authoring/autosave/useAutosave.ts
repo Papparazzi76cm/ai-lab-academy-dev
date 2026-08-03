@@ -1,163 +1,156 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { AuthoringBlock, AutosaveStatus } from "../types";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import type { AuthoringBlock, AutosaveStatus } from "../types";
 
-export interface UseAutosaveResult {
+export interface UseAutosaveReturn {
   status: AutosaveStatus;
-  lastSavedAt: Date | null;
-  serverRevision: number;
-  saveNow: () => Promise<boolean>;
-  flushPendingSave: () => Promise<boolean>;
+  isDirty: boolean;
   conflictMessage: string | null;
+  flushPendingSave: () => Promise<void>;
+  retrySave: () => Promise<void>;
 }
 
 export function useAutosave(
-  lessonId: string | null,
+  lessonId: string,
   blocks: AuthoringBlock[],
-  initialRevision: number = 1,
-  onRevisionUpdated?: (newRevision: number) => void,
-): UseAutosaveResult {
+  currentRevision: number,
+  onRevisionUpdate: (newRev: number) => void,
+  debounceMs: number = 2000,
+): UseAutosaveReturn {
   const [status, setStatus] = useState<AutosaveStatus>("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [serverRevision, setServerRevision] = useState<number>(initialRevision);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() => JSON.stringify(blocks));
 
-  const lastSavedBlocksRef = useRef<string>("");
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const sequenceCounterRef = useRef<number>(0);
-  const currentLessonIdRef = useRef<string | null>(lessonId);
-  const blocksRef = useRef<AuthoringBlock[]>(blocks);
-  const serverRevisionRef = useRef<number>(initialRevision);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
 
-  blocksRef.current = blocks;
-  serverRevisionRef.current = serverRevision;
+  const currentSnapshot = JSON.stringify(blocks);
+  const isDirty = currentSnapshot !== lastSavedSnapshot;
 
-  // Reset when lessonId changes
-  useEffect(() => {
-    if (lessonId !== currentLessonIdRef.current) {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      currentLessonIdRef.current = lessonId;
-      setServerRevision(initialRevision);
-      serverRevisionRef.current = initialRevision;
-      lastSavedBlocksRef.current = JSON.stringify(blocks);
-      setStatus("idle");
-      setConflictMessage(null);
-    }
-  }, [lessonId, initialRevision, blocks]);
-
-  const executeSave = useCallback(
-    async (blocksToSave: AuthoringBlock[]): Promise<boolean> => {
-      const activeLessonId = currentLessonIdRef.current;
-      if (!activeLessonId) return false;
-
-      const serialized = JSON.stringify(blocksToSave);
-      if (serialized === lastSavedBlocksRef.current && status === "saved") {
-        return true;
-      }
-
-      // Increment sequence ID to discard stale out-of-order responses
-      const currentSeq = ++sequenceCounterRef.current;
-      setStatus("saving");
-
+  const performSaveRpc = useCallback(
+    async (
+      id: string,
+      payloadBlocks: AuthoringBlock[],
+      expectedRev: number,
+      requestId: number,
+    ): Promise<boolean> => {
       try {
-        const payload = blocksToSave.map((b, idx) => ({
-          id: b.id,
-          lesson_id: activeLessonId,
-          type: b.type,
-          position: idx,
-          content_json: b.content_json,
-          settings_json: { ...b.settings_json, visibility: b.visibility },
-        }));
-
-        const { data, error } = await supabase.rpc("save_lesson_blocks_rpc", {
-          p_lesson_id: activeLessonId,
-          p_blocks: payload,
-          p_expected_revision: serverRevisionRef.current,
+        const { data, error } = await (supabase.rpc as any)("save_lesson_blocks_rpc", {
+          p_lesson_id: id,
+          p_blocks: payloadBlocks,
+          p_expected_revision: expectedRev,
         });
 
-        // Ignore response if sequence or lesson changed during inflight request
-        if (
-          currentSeq !== sequenceCounterRef.current ||
-          activeLessonId !== currentLessonIdRef.current
-        ) {
+        // Stale response protection
+        if (requestId < sequenceCounterRef.current) {
+          console.warn(`[useAutosave] Discarding stale save response (request #${requestId})`);
           return false;
         }
 
         if (error) {
-          if (error.message.includes("REVISION_CONFLICT")) {
+          if (error.code === "P0001" || error.message?.includes("REVISION_CONFLICT")) {
             setStatus("conflict");
-            const conflictMsg =
-              "La lección fue modificada en otra sesión. Recarga para evitar sobrescribir cambios.";
-            setConflictMessage(conflictMsg);
-            toast.error("Conflicto de Edición", { description: conflictMsg });
+            setConflictMessage(
+              "Conflicto de edición: Otra persona o sesión ha actualizado esta lección. Por favor recarga la página.",
+            );
             return false;
           }
           throw error;
         }
 
-        const newRevision = data?.revision ? Number(data.revision) : serverRevisionRef.current + 1;
-        setServerRevision(newRevision);
-        serverRevisionRef.current = newRevision;
-        if (onRevisionUpdated) {
-          onRevisionUpdated(newRevision);
+        const resData = data as any;
+        if (resData && resData.success === false) {
+          if (resData.error_code === "REVISION_CONFLICT") {
+            setStatus("conflict");
+            setConflictMessage(
+              resData.message || "Conflicto de revisión detectado. Guarda tus cambios localmente.",
+            );
+            return false;
+          }
+          throw new Error(resData.message || "Error al guardar bloques.");
         }
 
-        lastSavedBlocksRef.current = serialized;
+        const newRevision = (resData?.revision as number) ?? currentRevision + 1;
+        onRevisionUpdate(newRevision);
+        setLastSavedSnapshot(JSON.stringify(payloadBlocks));
         setStatus("saved");
-        setLastSavedAt(new Date());
         setConflictMessage(null);
         return true;
-      } catch (err) {
-        if (currentSeq !== sequenceCounterRef.current) return false;
-        console.error("Autosave error:", err);
-        setStatus("error");
-        toast.error("Error al guardar borrador de lección");
+      } catch (err: unknown) {
+        if (requestId >= sequenceCounterRef.current) {
+          setStatus("error");
+          console.error("[useAutosave] Save error:", err);
+        }
         return false;
       }
     },
-    [onRevisionUpdated, status],
+    [currentRevision, onRevisionUpdate],
   );
 
-  const flushPendingSave = useCallback(async (): Promise<boolean> => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+  const flushPendingSave = useCallback(async (): Promise<void> => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
-    return await executeSave(blocksRef.current);
-  }, [executeSave]);
 
-  // Schedule debounced 2s autosave on change
+    if (currentSnapshot === lastSavedSnapshot || status === "conflict") {
+      return;
+    }
+
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+    }
+
+    const requestId = ++sequenceCounterRef.current;
+    setStatus("saving");
+    await performSaveRpc(lessonId, blocks, currentRevision, requestId);
+  }, [
+    blocks,
+    currentRevision,
+    currentSnapshot,
+    lastSavedSnapshot,
+    lessonId,
+    performSaveRpc,
+    status,
+  ]);
+
+  // Debounced autosave effect
   useEffect(() => {
-    if (!lessonId) return;
+    if (!isDirty || status === "conflict") return;
 
-    const serialized = JSON.stringify(blocks);
-    if (serialized !== lastSavedBlocksRef.current && status !== "conflict") {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-
-      timerRef.current = setTimeout(() => {
-        executeSave(blocksRef.current);
-      }, 2000);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
+
+    debounceTimerRef.current = setTimeout(() => {
+      flushPendingSave();
+    }, debounceMs);
 
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [blocks, lessonId, status, executeSave]);
+  }, [isDirty, debounceMs, flushPendingSave, status]);
+
+  // Cleanup on unmount or lessonId change
+  useEffect(() => {
+    return () => {
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [lessonId]);
 
   return {
     status,
-    lastSavedAt,
-    serverRevision,
-    saveNow: () => executeSave(blocksRef.current),
-    flushPendingSave,
+    isDirty,
     conflictMessage,
+    flushPendingSave,
+    retrySave: flushPendingSave,
   };
 }

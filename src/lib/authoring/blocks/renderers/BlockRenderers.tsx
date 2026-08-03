@@ -18,7 +18,19 @@ export function HeadingRenderer({
   const alignment = content.alignment || "left";
   const alignClass =
     alignment === "center" ? "text-center" : alignment === "right" ? "text-right" : "text-left";
-  const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+  const Tag = (
+    level === 1
+      ? "h1"
+      : level === 3
+        ? "h3"
+        : level === 4
+          ? "h4"
+          : level === 5
+            ? "h5"
+            : level === 6
+              ? "h6"
+              : "h2"
+  ) as React.ElementType;
 
   const sizeClasses: Record<number, string> = {
     1: "text-3xl sm:text-4xl font-extrabold tracking-tight mb-4",
@@ -186,7 +198,7 @@ export function CalloutRenderer({
     },
   };
 
-  const current = styles[variant] || styles.info;
+  const current = styles[variant] || styles["info"]!;
   const IconComponent = current.icon;
 
   return (

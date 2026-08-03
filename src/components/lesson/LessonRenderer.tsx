@@ -85,8 +85,10 @@ export function LessonRenderer({ lesson, blocks }: LessonRendererProps) {
 
       {/* Main Content Rendered via Published Blocks */}
       {blocks.length > 0 ? (
-        <section aria-label="Contenido de la lección" className="prose-container">
-          <BlockRenderer blocks={blocks} />
+        <section aria-label="Contenido de la lección" className="prose-container space-y-6">
+          {blocks.map((block) => (
+            <BlockRenderer key={block.id} block={block} />
+          ))}
         </section>
       ) : !hasRawVideoUrl ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">

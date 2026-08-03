@@ -19,39 +19,57 @@ export function ButtonBlockEditor({
 }: BlockEditorProps<{ label: string; url: string; variant: string; openInNewTab: boolean }>) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          value={content.label || ""}
-          onChange={(e) => onChangeContent({ label: e.target.value })}
-          placeholder="Texto del botón"
-        />
-        <Input
-          value={content.url || ""}
-          onChange={(e) => onChangeContent({ url: e.target.value })}
-          placeholder="URL del enlace (https://...)"
-        />
-      </div>
-      <div className="flex items-center justify-between">
-        <Select
-          value={content.variant || "primary"}
-          onValueChange={(val) => onChangeContent({ variant: val })}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="primary">Principal</SelectItem>
-            <SelectItem value="secondary">Secundario</SelectItem>
-            <SelectItem value="outline">Borde</SelectItem>
-          </SelectContent>
-        </Select>
-        <label className="flex items-center gap-2 text-xs cursor-pointer">
-          <Switch
-            checked={content.openInNewTab !== false}
-            onCheckedChange={(val) => onChangeContent({ openInNewTab: val })}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            Texto del Botón
+          </label>
+          <Input
+            value={content.label || ""}
+            onChange={(e) => onChangeContent({ label: e.target.value })}
+            placeholder="ej. Descargar Recursos"
           />
-          Abrir en nueva pestaña
-        </label>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            URL de Destino
+          </label>
+          <Input
+            value={content.url || ""}
+            onChange={(e) => onChangeContent({ url: e.target.value })}
+            placeholder="https://..."
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Variante</label>
+          <Select
+            value={content.variant || "default"}
+            onValueChange={(val) => onChangeContent({ variant: val })}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">Primario</SelectItem>
+              <SelectItem value="secondary">Secundario</SelectItem>
+              <SelectItem value="outline">Borde</SelectItem>
+              <SelectItem value="ghost">Transparente</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-2 mt-4">
+          <Switch
+            checked={content.openInNewTab ?? true}
+            onCheckedChange={(checked) => onChangeContent({ openInNewTab: checked })}
+          />
+          <label className="text-xs font-medium text-muted-foreground">
+            Abrir en nueva pestaña
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -68,8 +86,15 @@ export function ChecklistEditor({
   };
   const updateItem = (index: number, text: string) => {
     const next = [...items];
-    next[index] = { ...next[index], text };
-    onChangeContent({ items: next });
+    const current = next[index];
+    if (current) {
+      next[index] = {
+        id: current.id || `chk_${index}`,
+        text,
+        checked: !!current.checked,
+      };
+      onChangeContent({ items: next });
+    }
   };
   const removeItem = (index: number) => {
     onChangeContent({ items: items.filter((_, i) => i !== index) });
@@ -119,8 +144,15 @@ export function AccordionEditor({
   };
   const updateItem = (index: number, key: "title" | "content", val: string) => {
     const next = [...items];
-    next[index] = { ...next[index], [key]: val };
-    onChangeContent({ items: next });
+    const current = next[index];
+    if (current) {
+      next[index] = {
+        id: current.id || `acc_${index}`,
+        title: key === "title" ? val : current.title || "",
+        content: key === "content" ? val : current.content || "",
+      };
+      onChangeContent({ items: next });
+    }
   };
   const removeItem = (index: number) => {
     onChangeContent({ items: items.filter((_, i) => i !== index) });
@@ -171,8 +203,15 @@ export function TabsEditor({
   };
   const updateItem = (index: number, key: "label" | "content", val: string) => {
     const next = [...items];
-    next[index] = { ...next[index], [key]: val };
-    onChangeContent({ items: next });
+    const current = next[index];
+    if (current) {
+      next[index] = {
+        id: current.id || `tab_${index}`,
+        label: key === "label" ? val : current.label || "",
+        content: key === "content" ? val : current.content || "",
+      };
+      onChangeContent({ items: next });
+    }
   };
   const removeItem = (index: number) => {
     onChangeContent({ items: items.filter((_, i) => i !== index) });
@@ -186,8 +225,8 @@ export function TabsEditor({
             <Input
               value={item.label}
               onChange={(e) => updateItem(idx, "label", e.target.value)}
-              placeholder="Etiqueta de la pestaña"
-              className="w-48 font-medium"
+              placeholder="Etiqueta de pestaña"
+              className="font-medium"
             />
             <Button variant="ghost" size="icon" onClick={() => removeItem(idx)}>
               <Trash2 className="size-4 text-destructive" />
@@ -196,7 +235,7 @@ export function TabsEditor({
           <Textarea
             value={item.content}
             onChange={(e) => updateItem(idx, "content", e.target.value)}
-            placeholder="Contenido..."
+            placeholder="Contenido de pestaña..."
             rows={2}
           />
         </div>
@@ -222,8 +261,15 @@ export function GalleryEditor({
   };
   const updateImage = (index: number, key: "url" | "caption" | "alt", val: string) => {
     const next = [...images];
-    next[index] = { ...next[index], [key]: val };
-    onChangeContent({ images: next });
+    const current = next[index];
+    if (current) {
+      next[index] = {
+        url: key === "url" ? val : current.url || "",
+        caption: key === "caption" ? val : (current.caption ?? ""),
+        alt: key === "alt" ? val : current.alt || "",
+      };
+      onChangeContent({ images: next });
+    }
   };
   const removeImage = (index: number) => {
     onChangeContent({ images: images.filter((_, i) => i !== index) });
@@ -247,37 +293,38 @@ export function GalleryEditor({
           </SelectContent>
         </Select>
       </div>
+
       <div className="space-y-2">
         {images.map((img, idx) => (
-          <div
-            key={idx}
-            className="p-3 border border-border rounded-lg grid grid-cols-3 gap-2 items-center"
-          >
-            <Input
-              value={img.url}
-              onChange={(e) => updateImage(idx, "url", e.target.value)}
-              placeholder="URL Imagen"
-            />
-            <Input
-              value={img.alt}
-              onChange={(e) => updateImage(idx, "alt", e.target.value)}
-              placeholder="Texto ALT (Obligatorio)"
-            />
+          <div key={idx} className="p-3 border border-border rounded-lg space-y-2">
             <div className="flex gap-2">
               <Input
-                value={img.caption || ""}
-                onChange={(e) => updateImage(idx, "caption", e.target.value)}
-                placeholder="Leyenda"
+                value={img.url}
+                onChange={(e) => updateImage(idx, "url", e.target.value)}
+                placeholder="https://..."
               />
               <Button variant="ghost" size="icon" onClick={() => removeImage(idx)}>
                 <Trash2 className="size-4 text-destructive" />
               </Button>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={img.caption || ""}
+                onChange={(e) => updateImage(idx, "caption", e.target.value)}
+                placeholder="Pie de foto (opcional)"
+              />
+              <Input
+                value={img.alt}
+                onChange={(e) => updateImage(idx, "alt", e.target.value)}
+                placeholder="Texto alternativo (alt)"
+              />
+            </div>
           </div>
         ))}
       </div>
+
       <Button variant="outline" size="sm" onClick={addImage}>
-        <Plus className="size-4 mr-1" /> Añadir imagen a la galería
+        <Plus className="size-4 mr-1" /> Añadir imagen
       </Button>
     </div>
   );
@@ -290,34 +337,54 @@ export function FileDownloadEditor({
   filename: string;
   fileUrl: string;
   fileSize?: string;
-  fileType?: string;
   description?: string;
 }>) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          value={content.filename || ""}
-          onChange={(e) => onChangeContent({ filename: e.target.value })}
-          placeholder="Nombre del archivo (ej. manual.pdf)"
-        />
-        <Input
-          value={content.fileUrl || ""}
-          onChange={(e) => onChangeContent({ fileUrl: e.target.value })}
-          placeholder="URL de descarga"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            Nombre del Archivo
+          </label>
+          <Input
+            value={content.filename || ""}
+            onChange={(e) => onChangeContent({ filename: e.target.value })}
+            placeholder="ej. Plantilla.pdf"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            URL del Archivo
+          </label>
+          <Input
+            value={content.fileUrl || ""}
+            onChange={(e) => onChangeContent({ fileUrl: e.target.value })}
+            placeholder="https://..."
+          />
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          value={content.fileSize || ""}
-          onChange={(e) => onChangeContent({ fileSize: e.target.value })}
-          placeholder="Tamaño (ej. 3.5 MB)"
-        />
-        <Input
-          value={content.description || ""}
-          onChange={(e) => onChangeContent({ description: e.target.value })}
-          placeholder="Descripción breve"
-        />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            Tamaño (opcional)
+          </label>
+          <Input
+            value={content.fileSize || ""}
+            onChange={(e) => onChangeContent({ fileSize: e.target.value })}
+            placeholder="ej. 1.2 MB"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            Descripción (opcional)
+          </label>
+          <Input
+            value={content.description || ""}
+            onChange={(e) => onChangeContent({ description: e.target.value })}
+            placeholder="ej. Guía PDF interactiva"
+          />
+        </div>
       </div>
     </div>
   );
@@ -326,43 +393,29 @@ export function FileDownloadEditor({
 export function EmbedEditor({
   content,
   onChangeContent,
-}: BlockEditorProps<{
-  provider: "youtube" | "vimeo" | "figma" | "canva" | "loom";
-  embedUrl: string;
-  aspectRatio?: string;
-  title?: string;
-}>) {
+}: BlockEditorProps<{ embedUrl: string; title?: string }>) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <Select
-          value={content.provider || "youtube"}
-          onValueChange={(val: "youtube" | "vimeo" | "figma" | "canva" | "loom") =>
-            onChangeContent({ provider: val })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="youtube">YouTube</SelectItem>
-            <SelectItem value="vimeo">Vimeo</SelectItem>
-            <SelectItem value="figma">Figma</SelectItem>
-            <SelectItem value="canva">Canva</SelectItem>
-            <SelectItem value="loom">Loom</SelectItem>
-          </SelectContent>
-        </Select>
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">
+          URL Embebida (iFrame)
+        </label>
         <Input
           value={content.embedUrl || ""}
           onChange={(e) => onChangeContent({ embedUrl: e.target.value })}
-          placeholder="URL iframe / embed"
+          placeholder="https://www.youtube.com/embed/..."
         />
       </div>
-      <Input
-        value={content.title || ""}
-        onChange={(e) => onChangeContent({ title: e.target.value })}
-        placeholder="Título del iframe / embed (Accesibilidad)"
-      />
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">
+          Título Accesible
+        </label>
+        <Input
+          value={content.title || ""}
+          onChange={(e) => onChangeContent({ title: e.target.value })}
+          placeholder="ej. Vídeo explicativo"
+        />
+      </div>
     </div>
   );
 }
@@ -370,28 +423,26 @@ export function EmbedEditor({
 export function QuizBlockEditor({
   content,
   onChangeContent,
-}: BlockEditorProps<{ quizId: string; showTitle: boolean; showPassingScore: boolean }>) {
+}: BlockEditorProps<{ quizId: string; showTitle: boolean }>) {
   return (
     <div className="space-y-3">
-      <Input
-        value={content.quizId || ""}
-        onChange={(e) => onChangeContent({ quizId: e.target.value })}
-        placeholder="ID del Cuestionario / Quiz"
-      />
-      <div className="flex items-center gap-4">
-        <label className="flex items-center gap-2 text-xs cursor-pointer">
-          <Switch
-            checked={content.showTitle !== false}
-            onCheckedChange={(val) => onChangeContent({ showTitle: val })}
-          />
-          Mostrar título del Quiz
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">
+          ID del Cuestionario
         </label>
-        <label className="flex items-center gap-2 text-xs cursor-pointer">
-          <Switch
-            checked={content.showPassingScore !== false}
-            onCheckedChange={(val) => onChangeContent({ showPassingScore: val })}
-          />
-          Mostrar nota de aprobación
+        <Input
+          value={content.quizId || ""}
+          onChange={(e) => onChangeContent({ quizId: e.target.value })}
+          placeholder="UUID o slug del cuestionario"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={content.showTitle ?? true}
+          onCheckedChange={(checked) => onChangeContent({ showTitle: checked })}
+        />
+        <label className="text-xs font-medium text-muted-foreground">
+          Mostrar título del cuestionario
         </label>
       </div>
     </div>
@@ -401,35 +452,45 @@ export function QuizBlockEditor({
 export function CertificateBlockEditor({
   content,
   onChangeContent,
-}: BlockEditorProps<{ templateId?: string; title: string; description: string }>) {
+}: BlockEditorProps<{ title: string; description: string }>) {
   return (
     <div className="space-y-3">
-      <Input
-        value={content.title || ""}
-        onChange={(e) => onChangeContent({ title: e.target.value })}
-        placeholder="Título del certificado"
-      />
-      <Textarea
-        value={content.description || ""}
-        onChange={(e) => onChangeContent({ description: e.target.value })}
-        placeholder="Descripción explicativa..."
-        rows={2}
-      />
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">
+          Título del Certificado
+        </label>
+        <Input
+          value={content.title || ""}
+          onChange={(e) => onChangeContent({ title: e.target.value })}
+          placeholder="Certificado de Finalización"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">Descripción</label>
+        <Textarea
+          value={content.description || ""}
+          onChange={(e) => onChangeContent({ description: e.target.value })}
+          placeholder="Acredita la superación exitosa..."
+          rows={2}
+        />
+      </div>
     </div>
   );
 }
 
 export function SpacerEditor({ content, onChangeContent }: BlockEditorProps<{ height: number }>) {
   return (
-    <div className="flex items-center gap-4">
-      <span className="text-xs text-muted-foreground">Altura del espaciador (px):</span>
+    <div>
+      <label className="text-xs font-medium text-muted-foreground block mb-1">
+        Altura en Píxeles ({content.height || 32}px)
+      </label>
       <Input
         type="number"
-        value={content.height || 32}
-        onChange={(e) => onChangeContent({ height: Number(e.target.value) })}
-        className="w-28"
         min={8}
         max={200}
+        step={8}
+        value={content.height || 32}
+        onChange={(e) => onChangeContent({ height: Number(e.target.value) })}
       />
     </div>
   );

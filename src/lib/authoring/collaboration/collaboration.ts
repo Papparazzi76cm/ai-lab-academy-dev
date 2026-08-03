@@ -13,9 +13,12 @@ export interface LockState {
 }
 
 export function createLockState(editor?: ActiveEditor): LockState {
-  return {
+  const state: LockState = {
     isLocked: Boolean(editor),
-    lockedBy: editor,
-    lockedAt: editor ? new Date().toISOString() : undefined,
   };
+  if (editor) {
+    state.lockedBy = editor;
+    state.lockedAt = new Date().toISOString();
+  }
+  return state;
 }

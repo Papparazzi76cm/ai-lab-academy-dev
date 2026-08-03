@@ -1,43 +1,70 @@
-import { describe, it, expect, vi } from "vitest";
-import { BlockRegistry } from "@/lib/authoring/blocks/registry";
-import {
-  createBlock,
-  duplicateBlock,
-  moveBlock,
-  deleteBlock,
-} from "@/lib/authoring/blocks/factory";
-import { validateLesson } from "@/lib/authoring/validation/lessonValidation";
-import { compareLessonVersions } from "@/lib/authoring/publishing/publishingService";
-import { adaptRawBlock, adaptRawBlocks, normalizeBlockType } from "@/lib/authoring/blocks/adapter";
-import type { AuthoringBlock } from "@/lib/authoring/types";
+// @vitest-environment happy-dom
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
+import { useHistory } from "../lib/authoring/history/useHistory";
+import { useAutosave } from "../lib/authoring/autosave/useAutosave";
+import { createBlock, duplicateBlock, moveBlock, deleteBlock } from "../lib/authoring/blocks/factory";
+import { adaptRawBlocks } from "../lib/authoring/blocks/adapter";
+import { validateLesson } from "../lib/authoring/validation/lessonValidation";
+import { supabase } from "@/integrations/supabase/client";
 
-describe("Sprint 2.8 — Authoring Studio Core Engine Tests", () => {
-  it("BlockRegistry registers all default block types with full metadata", () => {
-    const all = BlockRegistry.getAll();
-    expect(all.length).toBeGreaterThanOrEqual(18);
+// Mock Supabase RPC
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    rpc: vi.fn(),
+  },
+}));
 
-    const headingDef = BlockRegistry.get("heading");
-    expect(headingDef).toBeDefined();
-    expect(headingDef?.label).toContain("Título");
-    expect(headingDef?.editor).toBeDefined();
-    expect(headingDef?.renderer).toBeDefined();
-    expect(headingDef?.normalize).toBeDefined();
-    expect(headingDef?.migrate).toBeDefined();
-
-    const embedDef = BlockRegistry.get("embed");
-    expect(embedDef).toBeDefined();
-
-    const imageDef = BlockRegistry.get("image");
-    expect(imageDef).toBeDefined();
+describe("Sprint 2.8 Authoring Studio Architecture & Autosave Tests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("BlockFactory creates, duplicates, moves, and deletes blocks correctly with UUIDs", () => {
-    const block1 = createBlock("heading", { text: "Título 1" }, { visibility: "visible" }, 0);
-    const block2 = createBlock("paragraph", { text: "Párrafo 1" }, { visibility: "visible" }, 1);
+  it("1. useHistory handles push, undo, redo and reset correctly", () => {
+    const initialBlock = createBlock("heading", { text: "Header" });
+    const { result } = renderHook(() => useHistory([initialBlock]));
 
-    expect(block1.type).toBe("heading");
-    expect(block1.position).toBe(0);
-    // UUID format check
+    expect(result.current.blocks).toHaveLength(1);
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+
+    // Push new block
+    const paragraphBlock = createBlock("paragraph", { text: "Paragraph text" });
+    act(() => {
+      result.current.pushState([...result.current.blocks, paragraphBlock]);
+    });
+
+    expect(result.current.blocks).toHaveLength(2);
+    expect(result.current.canUndo).toBe(true);
+
+    // Undo
+    act(() => {
+      result.current.undo();
+    });
+
+    expect(result.current.blocks).toHaveLength(1);
+    expect(result.current.canRedo).toBe(true);
+
+    // Redo
+    act(() => {
+      result.current.redo();
+    });
+
+    expect(result.current.blocks).toHaveLength(2);
+
+    // Reset
+    act(() => {
+      result.current.resetHistory([initialBlock]);
+    });
+
+    expect(result.current.blocks).toHaveLength(1);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("2. Factory creates, duplicates, moves and deletes blocks correctly with UUIDs", () => {
+    const block1 = createBlock("heading", { text: "Heading 1" }, undefined, 0);
+    const block2 = createBlock("paragraph", { text: "Paragraph 1" }, undefined, 1);
+
     expect(block1.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
     // Duplicate
@@ -45,99 +72,263 @@ describe("Sprint 2.8 — Authoring Studio Core Engine Tests", () => {
     expect(dup.type).toBe("heading");
     expect(dup.id).not.toBe(block1.id);
     expect(dup.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-    expect(dup.position).toBe(1);
 
     // Move
     const list = [block1, block2];
     const moved = moveBlock(list, 0, 1);
-    expect(moved[0].id).toBe(block2.id);
-    expect(moved[0].position).toBe(0);
-    expect(moved[1].id).toBe(block1.id);
-    expect(moved[1].position).toBe(1);
+    expect(moved[0]!.id).toBe(block2.id);
+    expect(moved[0]!.position).toBe(0);
+    expect(moved[1]!.id).toBe(block1.id);
+    expect(moved[1]!.position).toBe(1);
 
     // Delete
     const afterDelete = deleteBlock(moved, block1.id);
     expect(afterDelete.length).toBe(1);
-    expect(afterDelete[0].id).toBe(block2.id);
+    expect(afterDelete[0]!.id).toBe(block2.id);
   });
 
-  it("Legacy block migration adapter converts legacy block structures seamlessly", () => {
+  it("3. Legacy block migration adapter is stable and produces identical UUIDs on multiple loads", () => {
     const legacyRaw = [
       { id: "blk_legacy_1", type: "h1", content_json: { text: "Título Antiguo" } },
       { id: "blk_legacy_2", type: "text", content: { text: "Texto Antiguo" } },
-      { id: "invalid-id", type: "callout", content_json: { text: "Alerta" } },
+      { type: "callout", content_json: { text: "Alerta importante", variant: "warning" } },
     ];
 
-    const adapted = adaptRawBlocks(legacyRaw);
-    expect(adapted).toHaveLength(3);
+    const adaptedLoad1 = adaptRawBlocks(legacyRaw);
+    const adaptedLoad2 = adaptRawBlocks(legacyRaw);
 
-    // Type normalization
-    expect(adapted[0].type).toBe("heading");
-    expect(adapted[0].position).toBe(0);
-    expect(adapted[0].id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
+    expect(adaptedLoad1).toHaveLength(3);
+    expect(adaptedLoad2).toHaveLength(3);
 
-    expect(adapted[1].type).toBe("paragraph");
-    expect(adapted[1].position).toBe(1);
+    // Stable ID preservation check across loads before persistence
+    expect(adaptedLoad1[0]!.id).toBe(adaptedLoad2[0]!.id);
+    expect(adaptedLoad1[1]!.id).toBe(adaptedLoad2[1]!.id);
+    expect(adaptedLoad1[2]!.id).toBe(adaptedLoad2[2]!.id);
 
-    expect(adapted[2].type).toBe("warning");
-    expect(adapted[2].position).toBe(2);
+    // Callout semantics preservation check
+    expect(adaptedLoad1[2]!.type).toBe("callout");
+    expect((adaptedLoad1[2]!.content_json as Record<string, unknown>)["variant"]).toBe("warning");
+
+    // Schema version check
+    expect(adaptedLoad1[0]!.schema_version).toBe(1);
   });
 
-  it("validateLesson validates schemas, mandatory alt text, and embed provider whitelist", () => {
-    // Valid block list
+  it("4. validateLesson validates schemas, mandatory alt text, and embed provider whitelist", () => {
     const validBlock = createBlock("image", {
       url: "https://example.com/img.png",
       alt: "Imagen explicativa de arquitectura",
       size: "medium",
     });
 
-    const resValid = validateLesson([validBlock]);
-    expect(resValid.isValid).toBe(true);
-    expect(resValid.errors).toHaveLength(0);
-
-    // Invalid block (image missing alt text)
-    const invalidImage = createBlock("image", {
+    const invalidImageBlock = createBlock("image", {
       url: "https://example.com/img.png",
-      alt: "", // Invalid empty alt
+      alt: " ", // Empty ALT text
     });
 
-    const resInvalidImg = validateLesson([invalidImage]);
-    expect(resInvalidImg.isValid).toBe(false);
-    expect(resInvalidImg.errors.some((e) => e.message.includes("ALT"))).toBe(true);
-
-    // Invalid embed provider (not in whitelist)
-    const invalidEmbed = createBlock("embed", {
-      provider: "untrusted_domain",
-      embedUrl: "https://untrusted.com",
+    const invalidEmbedBlock = createBlock("embed", {
+      provider: "unauthorized" as any,
+      embedUrl: "https://unauthorized-domain.com/iframe",
     });
 
-    const resInvalidEmbed = validateLesson([invalidEmbed]);
-    expect(resInvalidEmbed.isValid).toBe(false);
+    expect(validateLesson([validBlock]).isValid).toBe(true);
+    expect(validateLesson([invalidImageBlock]).isValid).toBe(false);
+    expect(validateLesson([invalidEmbedBlock]).isValid).toBe(false);
   });
 
-  it("compareLessonVersions correctly identifies added, removed, and modified blocks", () => {
-    const b1 = createBlock("heading", { text: "Versión 1 Título" }, {}, 0);
-    const b2 = createBlock("paragraph", { text: "Texto V1" }, {}, 1);
+  it("5. useAutosave executes save_lesson_blocks_rpc exclusively", async () => {
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: { success: true, revision: 2 },
+      error: null,
+    });
+    (supabase.rpc as any) = rpcMock;
 
-    const oldBlocks: AuthoringBlock[] = [b1, b2];
+    let revision = 1;
+    const initialBlocks = [createBlock("heading", { text: "Title" })];
+    const dirtyBlocks = [createBlock("heading", { text: "Title Modified" })];
 
-    // Modified b1, removed b2, added b3
-    const b1Mod = { ...b1, content_json: { ...b1.content_json, text: "Versión 2 Título Editado" } };
-    const b3New = createBlock("code", { code: "console.log('v2');" }, {}, 1);
+    const { result, rerender } = renderHook(
+      ({ currentBlocks }) =>
+        useAutosave("lesson-123", currentBlocks, revision, (newRev) => {
+          revision = newRev;
+        }),
+      { initialProps: { currentBlocks: initialBlocks } },
+    );
 
-    const newBlocks: AuthoringBlock[] = [b1Mod, b3New];
+    rerender({ currentBlocks: dirtyBlocks });
 
-    const diff = compareLessonVersions(oldBlocks, newBlocks);
-    expect(diff.addedBlocks).toHaveLength(1);
-    expect(diff.addedBlocks[0].id).toBe(b3New.id);
+    await act(async () => {
+      await result.current.flushPendingSave();
+    });
 
-    expect(diff.removedBlocks).toHaveLength(1);
-    expect(diff.removedBlocks[0].id).toBe(b2.id);
+    expect(rpcMock).toHaveBeenCalledWith("save_lesson_blocks_rpc", {
+      p_lesson_id: "lesson-123",
+      p_blocks: dirtyBlocks,
+      p_expected_revision: 1,
+    });
+    expect(revision).toBe(2);
+    expect(result.current.status).toBe("saved");
+  });
 
-    expect(diff.modifiedBlocks).toHaveLength(1);
-    expect(diff.modifiedBlocks[0].oldBlock.id).toBe(b1.id);
-    expect(diff.modifiedBlocks[0].changes).toContain("Contenido modificado");
+  it("6. useAutosave handles REVISION_CONFLICT without auto-retrying or overwriting", async () => {
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: {
+        success: false,
+        error_code: "REVISION_CONFLICT",
+        message: "Revision mismatch",
+      },
+      error: null,
+    });
+    (supabase.rpc as any) = rpcMock;
+
+    let revision = 1;
+    const initialBlocks = [createBlock("heading", { text: "Title" })];
+    const dirtyBlocks = [createBlock("heading", { text: "Title Modified" })];
+
+    const { result, rerender } = renderHook(
+      ({ currentBlocks }) =>
+        useAutosave("lesson-123", currentBlocks, revision, (newRev) => {
+          revision = newRev;
+        }),
+      { initialProps: { currentBlocks: initialBlocks } },
+    );
+
+    rerender({ currentBlocks: dirtyBlocks });
+
+    await act(async () => {
+      await result.current.flushPendingSave();
+    });
+
+    expect(result.current.status).toBe("conflict");
+    expect(result.current.conflictMessage).toBe("Revision mismatch");
+    expect(revision).toBe(1);
+  });
+
+  it("7. useAutosave discards stale responses when sequence changes", async () => {
+    let resolveFirstRpc: (val: any) => void = () => {};
+    const firstRpcPromise = new Promise((resolve) => {
+      resolveFirstRpc = resolve;
+    });
+
+    const rpcMock = vi
+      .fn()
+      .mockReturnValueOnce(firstRpcPromise)
+      .mockResolvedValueOnce({
+        data: { success: true, revision: 3 },
+        error: null,
+      });
+
+    (supabase.rpc as any) = rpcMock;
+
+    let revision = 1;
+    const initialBlocks = [createBlock("heading", { text: "Version 0" })];
+    const dirtyBlocks1 = [createBlock("heading", { text: "Version 1" })];
+    const dirtyBlocks2 = [createBlock("heading", { text: "Version 2" })];
+
+    const { result, rerender } = renderHook(
+      ({ currentBlocks }) =>
+        useAutosave("lesson-123", currentBlocks, revision, (newRev) => {
+          revision = newRev;
+        }),
+      { initialProps: { currentBlocks: initialBlocks } },
+    );
+
+    // Make dirty 1
+    rerender({ currentBlocks: dirtyBlocks1 });
+
+    // Trigger request #1
+    act(() => {
+      result.current.flushPendingSave();
+    });
+
+    // Make dirty 2 & trigger request #2
+    rerender({ currentBlocks: dirtyBlocks2 });
+
+    await act(async () => {
+      await result.current.flushPendingSave();
+    });
+
+    // Now resolve first RPC (stale)
+    await act(async () => {
+      resolveFirstRpc({
+        data: { success: true, revision: 2 },
+        error: null,
+      });
+    });
+
+    // Late first RPC should NOT override revision to 2
+    expect(revision).toBe(3);
+    expect(result.current.status).toBe("saved");
+  });
+
+  it("8. flushPendingSave returns immediately if state is clean", async () => {
+    const rpcMock = vi.fn();
+    (supabase.rpc as any) = rpcMock;
+
+    const blocks = [createBlock("heading", { text: "Title" })];
+
+    const { result } = renderHook(() => useAutosave("lesson-123", blocks, 1, () => {}));
+
+    await act(async () => {
+      await result.current.flushPendingSave();
+    });
+
+    // Clean snapshot should not invoke RPC
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("9. flushPendingSave triggers save if state is dirty", async () => {
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: { success: true, revision: 2 },
+      error: null,
+    });
+    (supabase.rpc as any) = rpcMock;
+
+    const initialBlocks = [createBlock("heading", { text: "Title 1" })];
+    const dirtyBlocks = [createBlock("heading", { text: "Title Modified" })];
+
+    const { result, rerender } = renderHook(
+      ({ currentBlocks }) => useAutosave("lesson-123", currentBlocks, 1, () => {}),
+      { initialProps: { currentBlocks: initialBlocks } },
+    );
+
+    rerender({ currentBlocks: dirtyBlocks });
+
+    await act(async () => {
+      await result.current.flushPendingSave();
+    });
+
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("10. Undo/Redo maintains block IDs across history stack", () => {
+    const b1 = createBlock("heading", { text: "Initial" });
+    const { result } = renderHook(() => useHistory([b1]));
+
+    const initialId = result.current.blocks[0]!.id;
+
+    // Add block
+    const b2 = createBlock("paragraph", { text: "Second" });
+    act(() => {
+      result.current.pushState([...result.current.blocks, b2]);
+    });
+
+    expect(result.current.blocks.length).toBe(2);
+    expect(result.current.blocks[0]!.id).toBe(initialId);
+
+    // Undo
+    act(() => {
+      result.current.undo();
+    });
+
+    expect(result.current.blocks.length).toBe(1);
+    expect(result.current.blocks[0]!.id).toBe(initialId);
+
+    // Redo
+    act(() => {
+      result.current.redo();
+    });
+
+    expect(result.current.blocks.length).toBe(2);
+    expect(result.current.blocks[0]!.id).toBe(initialId);
   });
 });

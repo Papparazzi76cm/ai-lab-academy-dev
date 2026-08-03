@@ -128,13 +128,13 @@ class BlockRegistryImpl {
         editor: HeadingEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: HeadingRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.heading,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.heading,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.heading || {},
         migrate: (raw) => {
-          if (raw.text || raw.content) {
+          if (raw["text"] || raw["content"]) {
             return {
-              text: String(raw.text || raw.content || ""),
-              level: Number(raw.level || 2),
-              alignment: String(raw.alignment || "left"),
+              text: String(raw["text"] || raw["content"] || ""),
+              level: Number(raw["level"] || 2),
+              alignment: String(raw["alignment"] || "left"),
             };
           }
           return raw;
@@ -149,10 +149,10 @@ class BlockRegistryImpl {
         editor: ParagraphEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ParagraphRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.paragraph,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.paragraph,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.paragraph || {},
         migrate: (raw) => {
           if (typeof raw === "string") return { text: raw };
-          return { text: String(raw.text || raw.content || "") };
+          return { text: String(raw["text"] || raw["content"] || "") };
         },
       },
       {
@@ -164,7 +164,7 @@ class BlockRegistryImpl {
         editor: ImageEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ImageRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.image,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.image,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.image || {},
       },
       {
         type: "video",
@@ -175,7 +175,7 @@ class BlockRegistryImpl {
         editor: VideoEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: VideoRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.video,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.video,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.video || {},
       },
       {
         type: "code",
@@ -186,7 +186,7 @@ class BlockRegistryImpl {
         editor: CodeEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: CodeRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.code,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.code,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.code || {},
       },
       {
         type: "quote",
@@ -197,7 +197,7 @@ class BlockRegistryImpl {
         editor: QuoteEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: QuoteRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.quote,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.quote,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.quote || {},
       },
       {
         type: "callout",
@@ -208,7 +208,7 @@ class BlockRegistryImpl {
         editor: CalloutEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: CalloutRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.callout,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.callout,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.callout || {},
       },
       {
         type: "divider",
@@ -219,7 +219,7 @@ class BlockRegistryImpl {
         editor: DividerEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: DividerRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.divider,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.divider,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.divider || {},
       },
       {
         type: "button",
@@ -230,7 +230,7 @@ class BlockRegistryImpl {
         editor: ButtonBlockEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ButtonBlockRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.button,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.button,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.button || {},
       },
       {
         type: "checklist",
@@ -241,7 +241,7 @@ class BlockRegistryImpl {
         editor: ChecklistEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ChecklistRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.checklist,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.checklist,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.checklist || {},
       },
       {
         type: "accordion",
@@ -252,7 +252,7 @@ class BlockRegistryImpl {
         editor: AccordionEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: AccordionRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.accordion,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.accordion,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.accordion || {},
       },
       {
         type: "tabs",
@@ -263,7 +263,7 @@ class BlockRegistryImpl {
         editor: TabsEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: TabsRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.tabs,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.tabs,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.tabs || {},
       },
       {
         type: "gallery",
@@ -274,7 +274,7 @@ class BlockRegistryImpl {
         editor: GalleryEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: GalleryRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.gallery,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.gallery,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.gallery || {},
       },
       {
         type: "file_download",
@@ -285,7 +285,7 @@ class BlockRegistryImpl {
         editor: FileDownloadEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: FileDownloadRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.file_download,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.file_download,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.file_download || {},
       },
       {
         type: "embed",
@@ -296,7 +296,7 @@ class BlockRegistryImpl {
         editor: EmbedEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: EmbedRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.embed,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.embed,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.embed || {},
       },
       {
         type: "quiz_block",
@@ -307,7 +307,7 @@ class BlockRegistryImpl {
         editor: QuizBlockEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: QuizBlockRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.quiz_block,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.quiz_block,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.quiz_block || {},
       },
       {
         type: "certificate_block",
@@ -320,7 +320,7 @@ class BlockRegistryImpl {
           BlockRendererProps<never>
         >,
         schema: blockSchemas.certificate_block,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.certificate_block,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.certificate_block || {},
       },
       {
         type: "spacer",
@@ -331,7 +331,7 @@ class BlockRegistryImpl {
         editor: SpacerEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: SpacerRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
         schema: blockSchemas.spacer,
-        defaultContent: DEFAULT_BLOCK_CONTENTS.spacer,
+        defaultContent: DEFAULT_BLOCK_CONTENTS.spacer || {},
       },
     ];
 

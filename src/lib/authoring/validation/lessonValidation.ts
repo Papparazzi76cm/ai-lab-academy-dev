@@ -45,7 +45,7 @@ export function validateLesson(blocks: AuthoringBlock[]): LessonValidationResult
 
     // Special validation checks
     if (block.type === "image") {
-      const alt = String(block.content_json.alt || "").trim();
+      const alt = String(block.content_json["alt"] || "").trim();
       if (!alt) {
         errors.push({
           blockId: block.id,
@@ -57,7 +57,7 @@ export function validateLesson(blocks: AuthoringBlock[]): LessonValidationResult
     }
 
     if (block.type === "embed") {
-      const provider = String(block.content_json.provider || "");
+      const provider = String(block.content_json["provider"] || "");
       if (
         !EMBED_PROVIDER_WHITELIST.includes(provider as (typeof EMBED_PROVIDER_WHITELIST)[number])
       ) {

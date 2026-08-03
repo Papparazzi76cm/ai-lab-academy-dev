@@ -43,8 +43,15 @@ export function ChecklistRenderer({
 
   const toggleItem = (idx: number) => {
     const next = [...items];
-    next[idx] = { ...next[idx], checked: !next[idx].checked };
-    setItems(next);
+    const currentItem = next[idx];
+    if (currentItem) {
+      next[idx] = {
+        id: currentItem.id || `chk_${idx}`,
+        text: currentItem.text || "",
+        checked: !currentItem.checked,
+      };
+      setItems(next);
+    }
   };
 
   return (
