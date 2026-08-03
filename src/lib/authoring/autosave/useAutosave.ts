@@ -2,12 +2,19 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { AuthoringBlock, AutosaveStatus } from "../types";
 
+export interface SaveBlocksRpcResponse {
+  success: boolean;
+  revision?: number;
+  error_code?: string;
+  message?: string;
+}
+
 export interface UseAutosaveReturn {
   status: AutosaveStatus;
   isDirty: boolean;
   conflictMessage: string | null;
-  flushPendingSave: () => Promise<void>;
-  retrySave: () => Promise<void>;
+  flushPendingSave: () => Promise<boolean>;
+  retrySave: () => Promise<boolean>;
 }
 
 export function useAutosave(
@@ -16,17 +23,32 @@ export function useAutosave(
   currentRevision: number,
   onRevisionUpdate: (newRev: number) => void,
   debounceMs: number = 2000,
+  maxRetries: number = 3,
+  initialRetryDelayMs: number = 1000,
 ): UseAutosaveReturn {
   const [status, setStatus] = useState<AutosaveStatus>("idle");
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() => JSON.stringify(blocks));
 
   const sequenceCounterRef = useRef<number>(0);
+  const retryCountRef = useRef<number>(0);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
 
   const currentSnapshot = JSON.stringify(blocks);
   const isDirty = currentSnapshot !== lastSavedSnapshot;
+
+  const cancelTimers = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
 
   const performSaveRpc = useCallback(
     async (
@@ -36,20 +58,24 @@ export function useAutosave(
       requestId: number,
     ): Promise<boolean> => {
       try {
-        const { data, error } = await (supabase.rpc as any)("save_lesson_blocks_rpc", {
-          p_lesson_id: id,
-          p_blocks: payloadBlocks,
-          p_expected_revision: expectedRev,
-        });
+        const { data, error } = await supabase.rpc(
+          "save_lesson_blocks_rpc" as never,
+          {
+            p_lesson_id: id,
+            p_blocks: payloadBlocks,
+            p_expected_revision: expectedRev,
+          } as never,
+        );
 
-        // Stale response protection
+        // Stale response protection: discard if sequence has moved on
         if (requestId < sequenceCounterRef.current) {
           console.warn(`[useAutosave] Discarding stale save response (request #${requestId})`);
           return false;
         }
 
         if (error) {
-          if (error.code === "P0001" || error.message?.includes("REVISION_CONFLICT")) {
+          const errObj = error as { code?: string; message?: string };
+          if (errObj.code === "P0001" || errObj.message?.includes("REVISION_CONFLICT")) {
             setStatus("conflict");
             setConflictMessage(
               "Conflicto de edición: Otra persona o sesión ha actualizado esta lección. Por favor recarga la página.",
@@ -59,7 +85,7 @@ export function useAutosave(
           throw error;
         }
 
-        const resData = data as any;
+        const resData = data as unknown as SaveBlocksRpcResponse | null;
         if (resData && resData.success === false) {
           if (resData.error_code === "REVISION_CONFLICT") {
             setStatus("conflict");
@@ -71,7 +97,8 @@ export function useAutosave(
           throw new Error(resData.message || "Error al guardar bloques.");
         }
 
-        const newRevision = (resData?.revision as number) ?? currentRevision + 1;
+        const newRevision = resData?.revision ?? currentRevision + 1;
+        retryCountRef.current = 0;
         onRevisionUpdate(newRevision);
         setLastSavedSnapshot(JSON.stringify(payloadBlocks));
         setStatus("saved");
@@ -81,21 +108,31 @@ export function useAutosave(
         if (requestId >= sequenceCounterRef.current) {
           setStatus("error");
           console.error("[useAutosave] Save error:", err);
+
+          // Schedule retry if under maxRetries limit and not in conflict
+          if (retryCountRef.current < maxRetries) {
+            const delay = initialRetryDelayMs * Math.pow(2, retryCountRef.current);
+            retryCountRef.current += 1;
+            retryTimerRef.current = setTimeout(() => {
+              if (requestId === sequenceCounterRef.current) {
+                const nextReqId = ++sequenceCounterRef.current;
+                setStatus("saving");
+                performSaveRpc(id, payloadBlocks, expectedRev, nextReqId);
+              }
+            }, delay);
+          }
         }
         return false;
       }
     },
-    [currentRevision, onRevisionUpdate],
+    [currentRevision, initialRetryDelayMs, maxRetries, onRevisionUpdate],
   );
 
-  const flushPendingSave = useCallback(async (): Promise<void> => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
+  const flushPendingSave = useCallback(async (): Promise<boolean> => {
+    cancelTimers();
 
     if (currentSnapshot === lastSavedSnapshot || status === "conflict") {
-      return;
+      return true;
     }
 
     if (activeAbortControllerRef.current) {
@@ -104,9 +141,14 @@ export function useAutosave(
 
     const requestId = ++sequenceCounterRef.current;
     setStatus("saving");
-    await performSaveRpc(lessonId, blocks, currentRevision, requestId);
+    const success = await performSaveRpc(lessonId, blocks, currentRevision, requestId);
+    if (!success) {
+      throw new Error("Error al guardar cambios pendientes.");
+    }
+    return success;
   }, [
     blocks,
+    cancelTimers,
     currentRevision,
     currentSnapshot,
     lastSavedSnapshot,
@@ -114,6 +156,11 @@ export function useAutosave(
     performSaveRpc,
     status,
   ]);
+
+  const retrySave = useCallback(async (): Promise<boolean> => {
+    retryCountRef.current = 0;
+    return flushPendingSave();
+  }, [flushPendingSave]);
 
   // Debounced autosave effect
   useEffect(() => {
@@ -124,7 +171,9 @@ export function useAutosave(
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      flushPendingSave();
+      flushPendingSave().catch(() => {
+        // Error state handled inside performSaveRpc
+      });
     }, debounceMs);
 
     return () => {
@@ -136,21 +185,21 @@ export function useAutosave(
 
   // Cleanup on unmount or lessonId change
   useEffect(() => {
+    retryCountRef.current = 0;
+    const controller = activeAbortControllerRef.current;
     return () => {
-      if (activeAbortControllerRef.current) {
-        activeAbortControllerRef.current.abort();
-      }
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+      cancelTimers();
+      if (controller) {
+        controller.abort();
       }
     };
-  }, [lessonId]);
+  }, [lessonId, cancelTimers]);
 
   return {
     status,
     isDirty,
     conflictMessage,
     flushPendingSave,
-    retrySave: flushPendingSave,
+    retrySave,
   };
 }

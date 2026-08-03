@@ -23,7 +23,7 @@ function AuthoringStudioRoute() {
   const { data: lessonData, isLoading: isLessonLoading } = useQuery({
     queryKey: ["authoring-lesson", lessonId],
     queryFn: async () => {
-      const { data: lesson, error: lErr } = await (supabase as any)
+      const { data: lesson, error: lErr } = await supabase
         .from("lessons")
         .select("id, title, course_id, revision")
         .eq("id", lessonId)

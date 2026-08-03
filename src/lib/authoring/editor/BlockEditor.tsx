@@ -41,7 +41,13 @@ export function BlockEditor({
     );
   }
 
-  const EditorComponent = def.editor as React.ComponentType<any>;
+  const EditorComponent = def.editor as React.ComponentType<{
+    block: AuthoringBlock;
+    content: Record<string, unknown>;
+    settings: AuthoringBlockSettings;
+    onChangeContent: (newContent: Partial<Record<string, unknown>>) => void;
+    onChangeSettings: (newSettings: Partial<AuthoringBlockSettings>) => void;
+  }>;
   const validationResult = def.validator.safeParse(block.content_json);
   const hasError = !validationResult.success;
 

@@ -306,7 +306,7 @@ export function LessonEditor({
               id: b.id,
               lesson_id: lessonId,
               position: b.position,
-              type: b.type as any,
+              type: b.type as BlockType,
               content_json: b.content_json,
               settings_json: b.settings_json,
             }))}
