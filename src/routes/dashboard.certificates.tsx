@@ -11,7 +11,10 @@ export const Route = createFileRoute("/dashboard/certificates")({
   head: () => ({
     meta: [
       { title: "Mis Certificados — AI Lab Academy" },
-      { name: "description", content: "Consulta y descarga tus certificados oficiales de AI Lab Academy." },
+      {
+        name: "description",
+        content: "Consulta y descarga tus certificados oficiales de AI Lab Academy.",
+      },
     ],
   }),
   component: DashboardCertificatesPage,
@@ -56,9 +59,12 @@ function DashboardCertificatesContent() {
             <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Award className="size-6" />
             </div>
-            <h3 className="mt-4 font-display text-lg font-bold">Aún no tienes certificados emitidos</h3>
+            <h3 className="mt-4 font-display text-lg font-bold">
+              Aún no tienes certificados emitidos
+            </h3>
             <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-              Completa al 100% tus cursos y aprueba las evaluaciones obligatorias para obtener tu certificado oficial.
+              Completa al 100% tus cursos y aprueba las evaluaciones obligatorias para obtener tu
+              certificado oficial.
             </p>
             <Button className="mt-6 gap-2" asChild>
               <Link to="/courses">

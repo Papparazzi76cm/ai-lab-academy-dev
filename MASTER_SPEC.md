@@ -66,4 +66,3 @@ AI Lab Academy is a high-performance learning platform built with React, TypeScr
   - Student dashboard at `/dashboard/certificates`.
   - Instructor dashboard at `/instructor/certificates`.
   - Public verification at `/verify/:verificationCode`.
-

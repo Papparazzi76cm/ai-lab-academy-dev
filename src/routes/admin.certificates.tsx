@@ -4,7 +4,13 @@ import { RequireRole } from "@/components/auth/RouteGuard";
 import { PageShell } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CertificateStatusBadge } from "@/components/certificates/CertificateStatusBadge";
 import { CertificateDetails } from "@/components/certificates/CertificateDetails";
@@ -19,7 +25,10 @@ export const Route = createFileRoute("/admin/certificates")({
   head: () => ({
     meta: [
       { title: "Gestión de Certificados — Admin" },
-      { name: "description", content: "Panel de administración de certificados y credenciales de AI Lab Academy." },
+      {
+        name: "description",
+        content: "Panel de administración de certificados y credenciales de AI Lab Academy.",
+      },
     ],
   }),
   component: AdminCertificatesPage,
@@ -27,7 +36,7 @@ export const Route = createFileRoute("/admin/certificates")({
 
 function AdminCertificatesPage() {
   return (
-    <RequireRole role="admin">
+    <RequireRole roles={["admin"]}>
       <AdminCertificatesContent />
     </RequireRole>
   );
@@ -56,7 +65,7 @@ function AdminCertificatesContent() {
           setRevokeCertId(null);
           setSelectedCert(null);
         },
-      }
+      },
     );
   };
 
@@ -141,7 +150,9 @@ function AdminCertificatesContent() {
                   {certificates.map((cert) => (
                     <tr key={cert.id} className="hover:bg-muted/20">
                       <td className="p-4 font-mono font-medium">{cert.certificate_number}</td>
-                      <td className="p-4 font-medium text-foreground">{cert.student_name_snapshot}</td>
+                      <td className="p-4 font-medium text-foreground">
+                        {cert.student_name_snapshot}
+                      </td>
                       <td className="p-4 max-w-[200px] truncate">{cert.course_title_snapshot}</td>
                       <td className="p-4 text-muted-foreground">
                         {new Date(cert.issued_at).toLocaleDateString("es-ES")}
@@ -170,7 +181,10 @@ function AdminCertificatesContent() {
         </div>
 
         {/* Detail Modal */}
-        <Dialog open={Boolean(selectedCert)} onOpenChange={(open) => !open && setSelectedCert(null)}>
+        <Dialog
+          open={Boolean(selectedCert)}
+          onOpenChange={(open) => !open && setSelectedCert(null)}
+        >
           <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="font-display text-lg">Detalles del Certificado</DialogTitle>

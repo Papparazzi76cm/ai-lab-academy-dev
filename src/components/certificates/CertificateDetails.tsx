@@ -1,5 +1,14 @@
 import React from "react";
-import { Award, Calendar, User, BookOpen, ShieldCheck, Download, AlertTriangle, RefreshCw } from "lucide-react";
+import {
+  Award,
+  Calendar,
+  User,
+  BookOpen,
+  ShieldCheck,
+  Download,
+  AlertTriangle,
+  RefreshCw,
+} from "lucide-react";
 import { CertificateStatusBadge } from "./CertificateStatusBadge";
 import { CertificateDownloadButton } from "./CertificateDownloadButton";
 import { Button } from "@/components/ui/button";
@@ -25,7 +34,9 @@ export function CertificateDetails({
     <div id={`cert-details-${certificate.id}`} className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          <span className="font-mono text-xs text-muted-foreground uppercase">{certificate.certificate_number}</span>
+          <span className="font-mono text-xs text-muted-foreground uppercase">
+            {certificate.certificate_number}
+          </span>
           <h2 className="font-display text-xl font-bold">{certificate.course_title_snapshot}</h2>
         </div>
         <CertificateStatusBadge status={certificate.status} />

@@ -51,7 +51,8 @@ export function CertificateCard({ certificate, showActions = true }: Certificate
             {certificate.course_title_snapshot}
           </h3>
           <p className="text-xs text-muted-foreground">
-            Otorgado a: <span className="font-medium text-foreground">{certificate.student_name_snapshot}</span>
+            Otorgado a:{" "}
+            <span className="font-medium text-foreground">{certificate.student_name_snapshot}</span>
           </p>
         </div>
 
@@ -89,7 +90,11 @@ export function CertificateCard({ certificate, showActions = true }: Certificate
               asChild
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
             >
-              <Link to="/verify/$verificationCode" params={{ verificationCode: certificate.verification_code }} target="_blank">
+              <Link
+                to="/verify/$verificationCode"
+                params={{ verificationCode: certificate.verification_code }}
+                target="_blank"
+              >
                 Verificar
                 <ExternalLink className="size-3.5" />
               </Link>

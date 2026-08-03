@@ -12,7 +12,10 @@ export const Route = createFileRoute("/admin/certificate-templates")({
   head: () => ({
     meta: [
       { title: "Plantillas de Certificados — Admin" },
-      { name: "description", content: "Editor de plantillas oficiales de certificados para AI Lab Academy." },
+      {
+        name: "description",
+        content: "Editor de plantillas oficiales de certificados para AI Lab Academy.",
+      },
     ],
   }),
   component: AdminCertificateTemplatesPage,
@@ -20,7 +23,7 @@ export const Route = createFileRoute("/admin/certificate-templates")({
 
 function AdminCertificateTemplatesPage() {
   return (
-    <RequireRole role="admin">
+    <RequireRole roles={["admin"]}>
       <AdminCertificateTemplatesContent />
     </RequireRole>
   );

@@ -43,7 +43,8 @@ export function RevokeCertificateDialog({
           </div>
           <DialogTitle className="font-display text-lg">Revocar Certificado</DialogTitle>
           <DialogDescription className="text-xs">
-            Esta acción marcará el certificado como revocado de forma permanente. La página pública seguirá indicando que la credencial fue revocada.
+            Esta acción marcará el certificado como revocado de forma permanente. La página pública
+            seguirá indicando que la credencial fue revocada.
           </DialogDescription>
         </DialogHeader>
 

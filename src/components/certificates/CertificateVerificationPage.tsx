@@ -1,6 +1,14 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { ShieldCheck, AlertOctagon, Award, Building2, Calendar, FileText, CheckCircle2 } from "lucide-react";
+import {
+  ShieldCheck,
+  AlertOctagon,
+  Award,
+  Building2,
+  Calendar,
+  FileText,
+  CheckCircle2,
+} from "lucide-react";
 import { CertificateStatusBadge } from "./CertificateStatusBadge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +33,9 @@ export function CertificateVerificationPage({
           Credencial No Encontrada
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          El código de verificación <span className="font-mono font-bold text-foreground">{verificationCode}</span> no corresponde a ningún certificado válido emitido por AI Lab Academy.
+          El código de verificación{" "}
+          <span className="font-mono font-bold text-foreground">{verificationCode}</span> no
+          corresponde a ningún certificado válido emitido por AI Lab Academy.
         </p>
         <div className="mt-8">
           <Button asChild variant="outline">
@@ -55,20 +65,26 @@ export function CertificateVerificationPage({
 
   return (
     <div id="verify-success-container" className="mx-auto max-w-2xl px-4 py-12 sm:py-16">
-      <Card className={`overflow-hidden border shadow-medium ${isRevoked ? "border-destructive/40 bg-destructive/5" : "border-emerald-500/30"}`}>
+      <Card
+        className={`overflow-hidden border shadow-medium ${isRevoked ? "border-destructive/40 bg-destructive/5" : "border-emerald-500/30"}`}
+      >
         <CardHeader className="border-b border-border bg-card/50 p-6 sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className={`flex size-12 items-center justify-center rounded-xl ${isRevoked ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-500"}`}>
-                {isRevoked ? <AlertOctagon className="size-6" /> : <ShieldCheck className="size-6" />}
+              <div
+                className={`flex size-12 items-center justify-center rounded-xl ${isRevoked ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-500"}`}
+              >
+                {isRevoked ? (
+                  <AlertOctagon className="size-6" />
+                ) : (
+                  <ShieldCheck className="size-6" />
+                )}
               </div>
               <div>
                 <CardTitle className="font-display text-xl sm:text-2xl">
                   Verificación Oficial de Credencial
                 </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Emitido por AI Lab Academy
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Emitido por AI Lab Academy</p>
               </div>
             </div>
             <CertificateStatusBadge status={result.status || "active"} />
@@ -80,7 +96,9 @@ export function CertificateVerificationPage({
             <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
               <p className="font-semibold">Atención: Certificado Revocado</p>
               <p className="mt-1 text-xs opacity-90">
-                Motivo: {result.revocation_reason_public || "Este certificado ha sido revocado oficialmente por la institución."}
+                Motivo:{" "}
+                {result.revocation_reason_public ||
+                  "Este certificado ha sido revocado oficialmente por la institución."}
               </p>
             </div>
           )}
@@ -115,9 +133,7 @@ export function CertificateVerificationPage({
               <span className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
                 <Award className="size-3.5" /> Programa / Curso
               </span>
-              <p className="font-display text-xl font-bold text-primary">
-                {result.course_title}
-              </p>
+              <p className="font-display text-xl font-bold text-primary">{result.course_title}</p>
             </div>
 
             <div className="space-y-1">
@@ -138,7 +154,9 @@ export function CertificateVerificationPage({
               <span className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
                 <Building2 className="size-3.5" /> Institución Emisora
               </span>
-              <p className="text-sm font-medium text-foreground">{result.issuer || "AI Lab Academy"}</p>
+              <p className="text-sm font-medium text-foreground">
+                {result.issuer || "AI Lab Academy"}
+              </p>
             </div>
           </div>
         </CardContent>

@@ -32,7 +32,7 @@ export function CertificateTemplateEditor({
     setValue,
     formState: { errors },
   } = useForm<TemplateFormValues>({
-    resolver: zodResolver(CertificateTemplateSchema),
+    resolver: zodResolver(CertificateTemplateSchema) as never,
     defaultValues: {
       name: initialTemplate?.name || "Plantilla Oficial",
       is_default: initialTemplate?.is_default ?? false,
@@ -73,7 +73,11 @@ export function CertificateTemplateEditor({
 
           <div className="space-y-1.5">
             <Label htmlFor="template-name">Nombre de la Plantilla</Label>
-            <Input id="template-name" {...register("name")} placeholder="Ej. Plantilla Especial Python" />
+            <Input
+              id="template-name"
+              {...register("name")}
+              placeholder="Ej. Plantilla Especial Python"
+            />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
@@ -107,8 +111,12 @@ export function CertificateTemplateEditor({
 
           <div className="flex items-center justify-between pt-2">
             <div>
-              <Label htmlFor="switch-default" className="font-medium">Plantilla Predeterminada Global</Label>
-              <p className="text-xs text-muted-foreground">Utilizada si un curso no tiene plantilla específica</p>
+              <Label htmlFor="switch-default" className="font-medium">
+                Plantilla Predeterminada Global
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Utilizada si un curso no tiene plantilla específica
+              </p>
             </div>
             <Switch
               id="switch-default"
@@ -139,12 +147,20 @@ export function CertificateTemplateEditor({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="signature-name">Nombre Firmante</Label>
-              <Input id="signature-name" {...register("signature_name")} placeholder="Ej. Dr. Carlos Mariscal" />
+              <Input
+                id="signature-name"
+                {...register("signature_name")}
+                placeholder="Ej. Dr. Carlos Mariscal"
+              />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="signature-title">Cargo Firmante</Label>
-              <Input id="signature-title" {...register("signature_title")} placeholder="Ej. Director Académico" />
+              <Input
+                id="signature-title"
+                {...register("signature_title")}
+                placeholder="Ej. Director Académico"
+              />
             </div>
           </div>
         </div>
@@ -158,14 +174,16 @@ export function CertificateTemplateEditor({
       <div className="space-y-4">
         <h3 className="font-display text-base font-bold">Vista Previa en Tiempo Real</h3>
         <CertificatePreview
-          template={{
-            name: watchAllFields.name,
-            primary_color: watchAllFields.primary_color,
-            secondary_color: watchAllFields.secondary_color,
-            signature_name: watchAllFields.signature_name,
-            signature_title: watchAllFields.signature_title,
-            layout_json: watchAllFields.layout_json,
-          }}
+          template={
+            {
+              name: watchAllFields.name,
+              primary_color: watchAllFields.primary_color,
+              secondary_color: watchAllFields.secondary_color,
+              signature_name: watchAllFields.signature_name ?? null,
+              signature_title: watchAllFields.signature_title ?? null,
+              layout_json: watchAllFields.layout_json,
+            } as unknown as CertificateTemplate
+          }
         />
       </div>
     </div>

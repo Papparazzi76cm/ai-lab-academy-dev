@@ -84,7 +84,11 @@ export function useCertificateEvents(certificateId?: string) {
   });
 }
 
-export function useCertificateAdmin(params?: { search?: string; status?: string; courseId?: string }) {
+export function useCertificateAdmin(params?: {
+  search?: string;
+  status?: string;
+  courseId?: string;
+}) {
   const queryClient = useQueryClient();
 
   const certificatesQuery = useQuery({

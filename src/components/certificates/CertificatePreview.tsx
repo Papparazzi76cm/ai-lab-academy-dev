@@ -72,11 +72,16 @@ export function CertificatePreview({
 
         <p className="text-xs text-muted-foreground">{layout.bodyText}</p>
 
-        <p className="font-display text-2xl font-extrabold sm:text-3xl" style={{ color: primaryColor }}>
+        <p
+          className="font-display text-2xl font-extrabold sm:text-3xl"
+          style={{ color: primaryColor }}
+        >
           {studentName}
         </p>
 
-        <p className="text-xs text-muted-foreground">Ha superado con éxito el programa formativo:</p>
+        <p className="text-xs text-muted-foreground">
+          Ha superado con éxito el programa formativo:
+        </p>
 
         <p className="font-display text-lg font-bold sm:text-xl" style={{ color: secondaryColor }}>
           "{courseTitle}"

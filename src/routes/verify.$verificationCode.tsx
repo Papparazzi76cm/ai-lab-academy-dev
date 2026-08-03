@@ -27,7 +27,9 @@ function VerifyCertificateRoute() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Loader2 className="size-8 animate-spin text-primary" />
-            <p className="mt-4 text-sm text-muted-foreground">Verificando credencial en el servidor oficial...</p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Verificando credencial en el servidor oficial...
+            </p>
           </div>
         ) : (
           <CertificateVerificationPage

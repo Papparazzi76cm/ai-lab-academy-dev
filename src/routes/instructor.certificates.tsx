@@ -13,7 +13,10 @@ export const Route = createFileRoute("/instructor/certificates")({
   head: () => ({
     meta: [
       { title: "Certificados de mis Cursos — Instructor" },
-      { name: "description", content: "Consulta de certificados emitidos para los estudiantes de tus cursos." },
+      {
+        name: "description",
+        content: "Consulta de certificados emitidos para los estudiantes de tus cursos.",
+      },
     ],
   }),
   component: InstructorCertificatesPage,
@@ -21,7 +24,7 @@ export const Route = createFileRoute("/instructor/certificates")({
 
 function InstructorCertificatesPage() {
   return (
-    <RequireRole role="instructor">
+    <RequireRole roles={["instructor", "admin"]}>
       <InstructorCertificatesContent />
     </RequireRole>
   );
@@ -88,7 +91,9 @@ function InstructorCertificatesContent() {
                   {certificates.map((cert) => (
                     <tr key={cert.id} className="hover:bg-muted/20">
                       <td className="p-4 font-mono font-medium">{cert.certificate_number}</td>
-                      <td className="p-4 font-medium text-foreground">{cert.student_name_snapshot}</td>
+                      <td className="p-4 font-medium text-foreground">
+                        {cert.student_name_snapshot}
+                      </td>
                       <td className="p-4 max-w-[200px] truncate">{cert.course_title_snapshot}</td>
                       <td className="p-4 text-muted-foreground">
                         {new Date(cert.issued_at).toLocaleDateString("es-ES")}
@@ -97,7 +102,11 @@ function InstructorCertificatesContent() {
                         <CertificateStatusBadge status={cert.status} showIcon={false} />
                       </td>
                       <td className="p-4 text-right">
-                        <CertificateDownloadButton certificateId={cert.id} size="sm" variant="ghost" />
+                        <CertificateDownloadButton
+                          certificateId={cert.id}
+                          size="sm"
+                          variant="ghost"
+                        />
                       </td>
                     </tr>
                   ))}

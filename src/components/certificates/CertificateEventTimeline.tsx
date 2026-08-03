@@ -10,7 +10,11 @@ export function CertificateEventTimeline({ certificateId }: CertificateEventTime
   const { data: events, isLoading } = useCertificateEvents(certificateId);
 
   if (isLoading) {
-    return <p className="text-xs text-muted-foreground animate-pulse">Cargando historial de auditoría...</p>;
+    return (
+      <p className="text-xs text-muted-foreground animate-pulse">
+        Cargando historial de auditoría...
+      </p>
+    );
   }
 
   if (!events || events.length === 0) {
@@ -67,7 +71,9 @@ export function CertificateEventTimeline({ certificateId }: CertificateEventTime
               {getEventIcon(event.event_type)}
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs font-medium text-foreground">{getEventTitle(event.event_type)}</p>
+              <p className="text-xs font-medium text-foreground">
+                {getEventTitle(event.event_type)}
+              </p>
               <p className="text-[11px] text-muted-foreground">
                 {new Date(event.created_at).toLocaleString("es-ES")}
               </p>

@@ -64,7 +64,9 @@ export async function generateCertificatePdfDoc({
   doc.line(width / 4, 48, (width * 3) / 4, 48);
 
   // Body text introductory
-  const bodyText = template?.layout_json?.bodyText || "Por haber completado satisfactoriamente el programa formativo de";
+  const bodyText =
+    template?.layout_json?.bodyText ||
+    "Por haber completado satisfactoriamente el programa formativo de";
   doc.setFont("helvetica", "normal");
   doc.setFontSize(12);
   doc.setTextColor("#475569");
@@ -80,7 +82,9 @@ export async function generateCertificatePdfDoc({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(12);
   doc.setTextColor("#475569");
-  doc.text("Ha superado con éxito todos los módulos y evaluaciones del curso:", width / 2, 92, { align: "center" });
+  doc.text("Ha superado con éxito todos los módulos y evaluaciones del curso:", width / 2, 92, {
+    align: "center",
+  });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
@@ -102,7 +106,12 @@ export async function generateCertificatePdfDoc({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor("#64748b");
-  doc.text(`Fecha de finalización: ${completionDateFormatted}  |  Fecha de emisión: ${issueDateFormatted}`, width / 2, 122, { align: "center" });
+  doc.text(
+    `Fecha de finalización: ${completionDateFormatted}  |  Fecha de emisión: ${issueDateFormatted}`,
+    width / 2,
+    122,
+    { align: "center" },
+  );
 
   // Instructor / Signature section
   if (certificate.instructor_name_snapshot || template?.signature_name) {
@@ -134,12 +143,16 @@ export async function generateCertificatePdfDoc({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(primaryColor);
-  doc.text(`Nº Certificado: ${certificate.certificate_number}`, width / 2, height - 28, { align: "center" });
+  doc.text(`Nº Certificado: ${certificate.certificate_number}`, width / 2, height - 28, {
+    align: "center",
+  });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor("#64748b");
-  doc.text(`Código de Verificación: ${certificate.verification_code}`, width / 2, height - 23, { align: "center" });
+  doc.text(`Código de Verificación: ${certificate.verification_code}`, width / 2, height - 23, {
+    align: "center",
+  });
 
   const verifyUrl = getPublicVerificationUrl(certificate.verification_code, origin);
   doc.text(`Verificación pública en: ${verifyUrl}`, width / 2, height - 18, { align: "center" });

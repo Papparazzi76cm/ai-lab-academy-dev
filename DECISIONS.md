@@ -68,12 +68,17 @@
 - **Decision**: Created `public.verify_certificate_rpc` returning ONLY non-sensitive public metadata (`found`, `status`, `certificate_number`, `student_name`, `course_title`, `issued_at`, `completed_at`, `issuer`, `revocation_reason_public`).
 - **Justification**: Protects student personal data (no email, UUIDs, quiz scores, or internal storage paths exposed) while fulfilling verification needs.
 
-### Decision 4: Decoupled PDF Generation with Private Bucket Storage & Signed URLs
+### Decision 4: Server-Side PDF Generation via Supabase Edge Function & Private Storage Bucket
 
-- **Context**: Generating PDFs solely in client browsers allows canvas manipulation, while storing public PDF files exposes credentials to unauthorized scraping.
-- **Decision**: Created server-decoupled PDF generation module (`jspdf` + `qrcode`) that uploads generated PDFs to the private `certificates` bucket in Supabase Storage and returns short-lived signed URLs for downloads.
-- **Justification**: Protects certificate documents behind RLS and signed access tokens while avoiding heavy browser execution overhead.
+- **Context**: Generating PDFs in client browsers allows canvas manipulation, exposes secret templates, and risks client-side tampering, while public bucket storage exposes official certificates to scraping.
+- **Decision**: Transferred official PDF generation exclusively to a Supabase Edge Function (`supabase/functions/generate-certificate-pdf/index.ts`). The function validates the user's JWT, verifies certificate ownership or admin privilege, rejects revoked/replaced certificates, generates the PDF and QR code entirely server-side, stores the PDF in a private Supabase Storage bucket (`certificates`), logs audit events via `private.record_certificate_event`, and returns temporary signed URLs (3600s).
+- **Justification**: Eliminates all client-side PDF generation vulnerabilities, enforces strict server authority over credential files, secures storage behind RLS policies, and guarantees audit trail integrity.
 
+### Decision 5: Automatic Server-Side Certificate Issuance via Learning Engine
+
+- **Context**: Relying on optional client requests to issue certificates after completing a course can lead to missing credentials or manual bypass attempts.
+- **Decision**: Integrated `private.issue_certificate_for_user` directly into the Learning Engine server progress sync (`sync_quiz_completion_progress` and `update_lesson_progress_rpc`). When a student reaches 100% course completion and passes all mandatory quizzes, the database server automatically triggers certificate issuance inside an advisory transactional lock (`pg_advisory_xact_lock`).
+- **Justification**: Guarantees immediate, reliable credential issuance as a direct consequence of learning completion without requiring explicit client invocation.
 
 ### Decision 2: Transactional Server-Side Grading via RPC (`submit_quiz_attempt_rpc`)
 

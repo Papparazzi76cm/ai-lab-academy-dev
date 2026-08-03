@@ -3,7 +3,7 @@ import { getPublicVerificationUrl } from "./certificate-number";
 
 export async function generateVerificationQrDataUrl(
   verificationCode: string,
-  origin?: string
+  origin?: string,
 ): Promise<string> {
   const url = getPublicVerificationUrl(verificationCode, origin);
   try {

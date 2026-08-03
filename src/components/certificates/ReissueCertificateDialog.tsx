@@ -32,7 +32,8 @@ export function ReissueCertificateDialog({
           </div>
           <DialogTitle className="font-display text-lg">Reemitir Credencial</DialogTitle>
           <DialogDescription className="text-xs">
-            Se marcará la credencial anterior como reemplazada y se generará una nueva credencial con número e identificador únicos e inmutables.
+            Se marcará la credencial anterior como reemplazada y se generará una nueva credencial
+            con número e identificador únicos e inmutables.
           </DialogDescription>
         </DialogHeader>
 
@@ -55,7 +56,11 @@ export function ReissueCertificateDialog({
             disabled={isPending}
             className="gap-2"
           >
-            {isPending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
             Confirmar Reemisión
           </Button>
         </DialogFooter>

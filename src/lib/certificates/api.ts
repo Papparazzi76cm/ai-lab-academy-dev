@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { generateCertificatePdfDoc } from "./pdf";
+import type { Json } from "@/integrations/supabase/types";
 import type {
   StudentCertificate,
   AdminCertificate,
@@ -18,10 +18,12 @@ export async function issueCourseCertificate(courseId: string): Promise<StudentC
     throw new Error(error.message || "No se pudo emitir el certificado");
   }
 
-  return data as StudentCertificate;
+  return data as unknown as StudentCertificate;
 }
 
-export async function verifyCertificate(verificationCode: string): Promise<CertificateVerificationResult> {
+export async function verifyCertificate(
+  verificationCode: string,
+): Promise<CertificateVerificationResult> {
   const { data, error } = await supabase.rpc("verify_certificate_rpc", {
     p_verification_code: verificationCode,
   });
@@ -31,7 +33,7 @@ export async function verifyCertificate(verificationCode: string): Promise<Certi
     return { found: false };
   }
 
-  return data as CertificateVerificationResult;
+  return data as unknown as CertificateVerificationResult;
 }
 
 export async function fetchStudentCertificates(): Promise<StudentCertificate[]> {
@@ -80,7 +82,9 @@ export async function fetchAdminCertificates(params?: {
 
   if (params?.search && params.search.trim()) {
     const s = `%${params.search.trim()}%`;
-    query = query.or(`certificate_number.ilike.${s},student_name_snapshot.ilike.${s},course_title_snapshot.ilike.${s},verification_code.ilike.${s}`);
+    query = query.or(
+      `certificate_number.ilike.${s},student_name_snapshot.ilike.${s},course_title_snapshot.ilike.${s},verification_code.ilike.${s}`,
+    );
   }
 
   const { data, error } = await query;
@@ -105,7 +109,9 @@ export async function fetchInstructorCertificates(params?: {
 
   if (params?.search && params.search.trim()) {
     const s = `%${params.search.trim()}%`;
-    query = query.or(`certificate_number.ilike.${s},student_name_snapshot.ilike.${s},course_title_snapshot.ilike.${s}`);
+    query = query.or(
+      `certificate_number.ilike.${s},student_name_snapshot.ilike.${s},course_title_snapshot.ilike.${s}`,
+    );
   }
 
   const { data, error } = await query;
@@ -118,7 +124,10 @@ export async function fetchInstructorCertificates(params?: {
   return (data || []) as StudentCertificate[];
 }
 
-export async function revokeCertificate(certificateId: string, reason: string): Promise<AdminCertificate> {
+export async function revokeCertificate(
+  certificateId: string,
+  reason: string,
+): Promise<AdminCertificate> {
   const { data, error } = await supabase.rpc("revoke_certificate_rpc", {
     p_certificate_id: certificateId,
     p_reason: reason,
@@ -129,7 +138,7 @@ export async function revokeCertificate(certificateId: string, reason: string): 
     throw new Error(error.message || "No se pudo revocar el certificado");
   }
 
-  return data as AdminCertificate;
+  return data as unknown as AdminCertificate;
 }
 
 export async function reissueCertificate(certificateId: string): Promise<AdminCertificate> {
@@ -142,75 +151,28 @@ export async function reissueCertificate(certificateId: string): Promise<AdminCe
     throw new Error(error.message || "No se pudo reemitir el certificado");
   }
 
-  return data as AdminCertificate;
+  return data as unknown as AdminCertificate;
 }
 
-export async function generateCertificatePdf(certificateId: string): Promise<{ pdfPath: string; downloadUrl: string }> {
-  // 1. Fetch certificate
-  const cert = await fetchCertificateDetail(certificateId);
-
-  // 2. Fetch template
-  let template: CertificateTemplate | null = null;
-  const { data: tData } = await supabase
-    .from("certificate_templates")
-    .select("*")
-    .eq("status", "active")
-    .or(`course_id.eq.${cert.course_id},is_default.eq.true`)
-    .order("is_default", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (tData) {
-    template = tData as unknown as CertificateTemplate;
-  }
-
-  // 3. Generate PDF doc
-  const pdfDoc = await generateCertificatePdfDoc({
-    certificate: cert,
-    template,
+export async function generateCertificatePdf(
+  certificateId: string,
+): Promise<{ pdfPath: string; downloadUrl: string }> {
+  const { data, error } = await supabase.functions.invoke("generate-certificate-pdf", {
+    body: { certificate_id: certificateId },
   });
 
-  const pdfArrayBuffer = pdfDoc.output("arraybuffer");
-  const blob = new Blob([pdfArrayBuffer], { type: "application/pdf" });
-
-  const userId = cert.id; // Or user's folder path
-  const storagePath = `${cert.course_id}/${cert.id}/certificate.pdf`;
-
-  // 4. Upload to storage bucket
-  const { error: uploadError } = await supabase.storage
-    .from("certificates")
-    .upload(storagePath, blob, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-
-  if (uploadError) {
-    console.warn("Upload to storage warning (proceeding with Blob URL fallback if restricted):", uploadError);
+  if (error) {
+    console.error("Error al invocar la función generate-certificate-pdf:", error);
+    throw new Error(error.message || "Error al generar el PDF del certificado");
   }
 
-  // 5. Update pdf_path in database
-  await supabase
-    .from("certificates")
-    .update({ pdf_path: storagePath, updated_at: new Date().toISOString() })
-    .eq("id", cert.id);
-
-  // 6. Record pdf_generated event
-  await supabase.from("certificate_events").insert({
-    certificate_id: cert.id,
-    event_type: "pdf_generated",
-    metadata_json: { path: storagePath },
-  });
-
-  // 7. Get temporary signed download URL
-  const { data: signedData } = await supabase.storage
-    .from("certificates")
-    .createSignedUrl(storagePath, 3600);
-
-  const downloadUrl = signedData?.signedUrl || URL.createObjectURL(blob);
+  if (data?.error) {
+    throw new Error(data.error);
+  }
 
   return {
-    pdfPath: storagePath,
-    downloadUrl,
+    pdfPath: data.pdf_path,
+    downloadUrl: data.signed_url,
   };
 }
 
@@ -257,14 +219,44 @@ export async function fetchCertificateTemplates(): Promise<CertificateTemplate[]
   return (data || []) as unknown as CertificateTemplate[];
 }
 
-export async function saveCertificateTemplate(templateData: Partial<CertificateTemplate>): Promise<CertificateTemplate> {
+export async function saveCertificateTemplate(
+  templateData: Partial<CertificateTemplate>,
+): Promise<CertificateTemplate> {
+  const layout = templateData.layout_json
+    ? (templateData.layout_json as unknown as Json)
+    : ({
+        orientation: "landscape",
+        showLogo: true,
+        showQr: true,
+        showSignature: true,
+        issuerName: "AI Lab Academy",
+        titleText: "Certificado de Finalización",
+        bodyText: "Por haber completado satisfactoriamente el programa formativo de",
+      } as unknown as Json);
+
   if (templateData.id) {
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+      layout_json: layout,
+    };
+    if (templateData["name"] !== undefined) updatePayload["name"] = templateData["name"];
+    if (templateData["course_id"] !== undefined)
+      updatePayload["course_id"] = templateData["course_id"];
+    if (templateData["is_default"] !== undefined)
+      updatePayload["is_default"] = templateData["is_default"];
+    if (templateData["status"] !== undefined) updatePayload["status"] = templateData["status"];
+    if (templateData["primary_color"] !== undefined)
+      updatePayload["primary_color"] = templateData["primary_color"];
+    if (templateData["secondary_color"] !== undefined)
+      updatePayload["secondary_color"] = templateData["secondary_color"];
+    if (templateData["signature_name"] !== undefined)
+      updatePayload["signature_name"] = templateData["signature_name"];
+    if (templateData["signature_title"] !== undefined)
+      updatePayload["signature_title"] = templateData["signature_title"];
+
     const { data, error } = await supabase
       .from("certificate_templates")
-      .update({
-        ...templateData,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload as never)
       .eq("id", templateData.id)
       .select()
       .single();
@@ -276,19 +268,14 @@ export async function saveCertificateTemplate(templateData: Partial<CertificateT
       .from("certificate_templates")
       .insert({
         name: templateData.name || "Nueva Plantilla",
+        course_id: templateData.course_id ?? null,
         is_default: templateData.is_default || false,
         status: templateData.status || "active",
         primary_color: templateData.primary_color || "#0f172a",
         secondary_color: templateData.secondary_color || "#2563eb",
-        layout_json: templateData.layout_json || {
-          orientation: "landscape",
-          showLogo: true,
-          showQr: true,
-          showSignature: true,
-          issuerName: "AI Lab Academy",
-          titleText: "Certificado de Finalización",
-          bodyText: "Por haber completado satisfactoriamente el programa formativo de",
-        },
+        signature_name: templateData.signature_name ?? null,
+        signature_title: templateData.signature_title ?? null,
+        layout_json: layout,
       })
       .select()
       .single();

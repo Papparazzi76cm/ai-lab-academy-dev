@@ -157,32 +157,156 @@ export type Database = {
       };
       certificates: {
         Row: {
-          code: string;
-          course_id: string;
           id: string;
-          issued_at: string;
-          pdf_url: string | null;
+          certificate_number: string;
+          verification_code: string;
           user_id: string;
+          course_id: string;
+          student_name_snapshot: string;
+          course_title_snapshot: string;
+          instructor_name_snapshot: string | null;
+          status: string;
+          pdf_path: string | null;
+          issued_at: string;
+          completed_at: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+          revocation_reason: string | null;
+          created_at: string;
+          updated_at: string;
         };
         Insert: {
-          code?: string;
-          course_id: string;
           id?: string;
-          issued_at?: string;
-          pdf_url?: string | null;
+          certificate_number: string;
+          verification_code: string;
           user_id: string;
+          course_id: string;
+          student_name_snapshot: string;
+          course_title_snapshot: string;
+          instructor_name_snapshot?: string | null;
+          status?: string;
+          pdf_path?: string | null;
+          issued_at?: string;
+          completed_at?: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          revocation_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Update: {
-          code?: string;
-          course_id?: string;
           id?: string;
-          issued_at?: string;
-          pdf_url?: string | null;
+          certificate_number?: string;
+          verification_code?: string;
           user_id?: string;
+          course_id?: string;
+          student_name_snapshot?: string;
+          course_title_snapshot?: string;
+          instructor_name_snapshot?: string | null;
+          status?: string;
+          pdf_path?: string | null;
+          issued_at?: string;
+          completed_at?: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          revocation_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [
           {
             foreignKeyName: "certificates_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      certificate_events: {
+        Row: {
+          id: string;
+          certificate_id: string;
+          event_type: string;
+          actor_user_id: string | null;
+          metadata_json: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          certificate_id: string;
+          event_type: string;
+          actor_user_id?: string | null;
+          metadata_json?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          certificate_id?: string;
+          event_type?: string;
+          actor_user_id?: string | null;
+          metadata_json?: Json;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "certificate_events_certificate_id_fkey";
+            columns: ["certificate_id"];
+            isOneToOne: false;
+            referencedRelation: "certificates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      certificate_templates: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          course_id: string | null;
+          is_default: boolean;
+          status: string;
+          primary_color: string;
+          secondary_color: string;
+          signature_name: string | null;
+          signature_title: string | null;
+          layout_json: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          course_id?: string | null;
+          is_default?: boolean;
+          status?: string;
+          primary_color?: string;
+          secondary_color?: string;
+          signature_name?: string | null;
+          signature_title?: string | null;
+          layout_json?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          course_id?: string | null;
+          is_default?: boolean;
+          status?: string;
+          primary_color?: string;
+          secondary_color?: string;
+          signature_name?: string | null;
+          signature_title?: string | null;
+          layout_json?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "certificate_templates_course_id_fkey";
             columns: ["course_id"];
             isOneToOne: false;
             referencedRelation: "courses";

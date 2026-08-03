@@ -17,7 +17,8 @@ export function isValidVerificationCodeFormat(code: string): boolean {
 }
 
 export function getPublicVerificationUrl(verificationCode: string, origin?: string): string {
-  const base = origin || (typeof window !== "undefined" ? window.location.origin : "https://ailab.academy");
+  const base =
+    origin || (typeof window !== "undefined" ? window.location.origin : "https://ailab.academy");
   const cleanCode = encodeURIComponent(formatVerificationCode(verificationCode));
   return `${base.replace(/\/$/, "")}/verify/${cleanCode}`;
 }

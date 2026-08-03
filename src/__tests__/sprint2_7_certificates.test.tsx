@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
@@ -36,12 +37,12 @@ describe("Certificate Formatting & Code Utilities", () => {
 describe("Certificate UI Components", () => {
   it("renders active CertificateStatusBadge", () => {
     render(<CertificateStatusBadge status="active" />);
-    expect(screen.getByText("Válido")).toBeInTheDocument();
+    expect(screen.getByText("Válido")).toBeDefined();
   });
 
   it("renders revoked CertificateStatusBadge", () => {
     render(<CertificateStatusBadge status="revoked" />);
-    expect(screen.getByText("Revocado")).toBeInTheDocument();
+    expect(screen.getByText("Revocado")).toBeDefined();
   });
 
   it("renders CertificatePreview with template info", () => {
@@ -52,10 +53,10 @@ describe("Certificate UI Components", () => {
           course_title_snapshot: "Ingeniería de Prompts",
           certificate_number: "AILA-2026-000100",
         }}
-      />
+      />,
     );
-    expect(screen.getByText("Carlos Mariscal")).toBeInTheDocument();
-    expect(screen.getByText('"Ingeniería de Prompts"')).toBeInTheDocument();
+    expect(screen.getByText("Carlos Mariscal")).toBeDefined();
+    expect(screen.getByText('"Ingeniería de Prompts"')).toBeDefined();
   });
 
   it("renders public verification page without private user data leaks", () => {
@@ -72,12 +73,12 @@ describe("Certificate UI Components", () => {
           issuer: "AI Lab Academy",
         }}
         verificationCode="7GQ4-K8M2-PZ9X-L3VN"
-      />
+      />,
     );
 
-    expect(screen.getByText("Juan Perez")).toBeInTheDocument();
-    expect(screen.getByText("AILA-2026-000001")).toBeInTheDocument();
-    expect(screen.getByText("Curso de Python para IA")).toBeInTheDocument();
+    expect(screen.getByText("Juan Perez")).toBeDefined();
+    expect(screen.getByText("AILA-2026-000001")).toBeDefined();
+    expect(screen.getByText("Curso de Python para IA")).toBeDefined();
     // Ensure no private credentials/user_id displayed
     expect(screen.queryByText(/@/)).toBeNull();
   });

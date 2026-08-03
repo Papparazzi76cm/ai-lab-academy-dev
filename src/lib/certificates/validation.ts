@@ -5,9 +5,18 @@ export const CertificateLayoutSchema = z.object({
   showLogo: z.boolean().default(true),
   showQr: z.boolean().default(true),
   showSignature: z.boolean().default(true),
-  issuerName: z.string().min(1, "El nombre de la institución es requerido").default("AI Lab Academy"),
-  titleText: z.string().min(1, "El título del certificado es requerido").default("Certificado de Finalización"),
-  bodyText: z.string().min(1, "El texto descriptivo es requerido").default("Por haber completado satisfactoriamente el programa formativo de"),
+  issuerName: z
+    .string()
+    .min(1, "El nombre de la institución es requerido")
+    .default("AI Lab Academy"),
+  titleText: z
+    .string()
+    .min(1, "El título del certificado es requerido")
+    .default("Certificado de Finalización"),
+  bodyText: z
+    .string()
+    .min(1, "El texto descriptivo es requerido")
+    .default("Por haber completado satisfactoriamente el programa formativo de"),
   qrSize: z.number().min(30).max(150).optional().default(60),
 });
 
@@ -20,13 +29,30 @@ export const CertificateTemplateSchema = z.object({
   logo_url: z.string().url("URL de logo inválida").nullable().optional().or(z.literal("")),
   signature_name: z.string().nullable().optional(),
   signature_title: z.string().nullable().optional(),
-  signature_image_url: z.string().url("URL de firma inválida").nullable().optional().or(z.literal("")),
-  primary_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Color primario hex inválido").default("#0f172a"),
-  secondary_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Color secundario hex inválido").default("#2563eb"),
+  signature_image_url: z
+    .string()
+    .url("URL de firma inválida")
+    .nullable()
+    .optional()
+    .or(z.literal("")),
+  primary_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "Color primario hex inválido")
+    .default("#0f172a"),
+  secondary_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "Color secundario hex inválido")
+    .default("#2563eb"),
   layout_json: CertificateLayoutSchema,
 });
 
-export const VerificationCodeSchema = z.string().trim().regex(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i, "Código de verificación con formato inválido");
+export const VerificationCodeSchema = z
+  .string()
+  .trim()
+  .regex(
+    /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i,
+    "Código de verificación con formato inválido",
+  );
 
 export const PublicCertificateSchema = z.object({
   certificate_number: z.string(),
