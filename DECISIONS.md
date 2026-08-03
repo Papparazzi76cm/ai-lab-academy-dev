@@ -87,3 +87,24 @@
 - **Context**: Parallel block engines create schema drift, code duplication, and rendering inconsistencies between Authoring Studio and Student Lesson Player.
 - **Decision**: Established a single source of truth in `BlockRegistry` and created `adaptRawBlocks()` to seamlessly normalize legacy block types (`h1` -> `heading`, `text` -> `paragraph`, `callout` -> `warning`) and ensure client UUID stability.
 - **Justification**: Guarantees backwards compatibility with existing lessons while maintaining strict TypeScript typing and DRY component architecture.
+
+## Sprint 2.9 — AI Authoring Assistant (Phase 1)
+
+### Decision 1: AI as Studio User (No Direct Database Writes)
+
+- **Context**: Allowing AI models to write directly to database tables risks inserting invalid JSON, bypassing optimistic locking revisions, or corrupting lesson state.
+- **Decision**: Decoupled the AI assistant from Supabase write operations. The AI generates an in-memory draft of `AuthoringBlock` items. Insertion into Supabase occurs only when the instructor explicitly reviews and accepts the draft through `save_lesson_blocks_rpc`.
+- **Justification**: Protects database integrity, preserves optimistic locking revision checks, and keeps human instructors in full control of published content.
+
+### Decision 2: Pipeline Pattern & Multi-Provider Abstraction
+
+- **Context**: Tightly coupling AI logic to a single provider (e.g. Gemini) limits flexibility and complicates testing.
+- **Decision**: Implemented an explicit pipeline (`Prompt` -> `Planner` -> `Outline` -> `Block Generator` -> `Validation` -> `AutoRepair` -> `Result`) driven by an `AIProvider` interface supporting Gemini, OpenAI, and Anthropic Claude.
+- **Justification**: Enables provider hot-swapping, mock provider testing, cost/token tracking, and structured error recovery at each isolated pipeline step.
+
+### Decision 3: Defensive Auto-Repair (`autoRepairBlocks`)
+
+- **Context**: AI models occasionally output slightly malformed block structures (e.g. missing ALT attribute on images, empty heading text, unregistered legacy types).
+- **Decision**: Built an auto-repair validator (`autoRepairBlocks`) that automatically fixes minor structural defects against `BlockRegistry` Zod schemas, logs repair entries for telemetry, and ensures 100% schema compliance before block preview or insertion.
+- **Justification**: Guarantees that AI-generated blocks never crash the editor or lesson player, providing a reliable and friction-free user experience.
+

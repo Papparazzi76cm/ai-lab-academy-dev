@@ -67,3 +67,24 @@ AI Lab Academy is a high-performance learning platform built with React, TypeScr
   - Student dashboard at `/dashboard/certificates`.
   - Instructor dashboard at `/instructor/certificates`.
   - Public verification at `/verify/:verificationCode`.
+
+### 6. AI Authoring Assistant - Phase 1 (Sprint 2.9)
+
+- **Architecture & Decoupling**:
+  - The AI Assistant acts as a standard authoring studio user. It **NEVER writes directly to Supabase**.
+  - All content generation produces an array of strongly-typed `AuthoringBlock` items that pass through client preview, manual instructor review, and `save_lesson_blocks_rpc`.
+  - Strict input/output boundaries: The AI produces only valid JSON block trees. No raw HTML, Markdown, JSX, or SQL is ever generated.
+- **Multi-Provider AI Abstraction**:
+  - Provider interface (`AIProvider`) supporting Google Gemini (`gemini-3.6-flash`), OpenAI (`gpt-4o`), and Anthropic Claude (`claude-3-5-sonnet-20241022`).
+  - Dynamic token counting and cost estimation per model execution.
+- **Generation Pipeline**:
+  - `Prompt` -> `Planner` (`LessonPlanner`) -> `Outline` (`LessonPlan`) -> `Block Generator` (`BlockGenerator` with `BlockTools`) -> `Validation` -> `AutoRepair` -> `Result`.
+- **Validation & Auto-Repair (`autoRepairBlocks`)**:
+  - Validates generated blocks against `BlockRegistry` and Zod schemas.
+  - Automatically repairs defective attributes (e.g., missing ALT tags on images, empty heading text, unregistered legacy types, unpopulated checklist items) while logging repair telemetry.
+- **Job Tracking & Telemetry**:
+  - Job tracking in `public.generation_jobs` via `create_generation_job_rpc`, `update_generation_job_rpc`, and `cancel_generation_job_rpc`.
+  - Telemetry logs duration, input/output tokens, estimated cost in USD, and repair metrics.
+- **User Interface (`GenerateLessonDialog`)**:
+  - Integrated into the Authoring Studio header.
+  - Interactive multi-step dialog featuring prompt configuration, real-time step progress with cancellation support, outline view, telemetry bar, and full preview using `LessonRenderer`.

@@ -15,6 +15,7 @@ import {
 } from "../publishing/publishingService";
 import { validateLesson } from "../validation/lessonValidation";
 import { LessonRenderer } from "@/components/lesson/LessonRenderer";
+import { GenerateLessonDialog } from "@/components/authoring/GenerateLessonDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -213,6 +214,14 @@ export function LessonEditor({
     }
   };
 
+  const handleAcceptAIGeneratedBlocks = async (newBlocks: AuthoringBlock[]) => {
+    pushState(newBlocks);
+    if (newBlocks.length > 0) {
+      setSelectedBlockId(newBlocks[0].id);
+    }
+    await flushPendingSave();
+  };
+
   return (
     <div className="h-screen w-full flex flex-col bg-background overflow-hidden select-none">
       {/* Revision conflict alert header banner */}
@@ -276,6 +285,12 @@ export function LessonEditor({
           </Button>
 
           <div className="h-4 w-px bg-border mx-1" />
+
+          <GenerateLessonDialog
+            lessonId={lessonId}
+            lessonTitle={lessonTitle}
+            onAcceptBlocks={handleAcceptAIGeneratedBlocks}
+          />
 
           <Button variant="outline" size="sm" onClick={handleTogglePreview}>
             <Eye className="size-4 mr-1.5" />{" "}
