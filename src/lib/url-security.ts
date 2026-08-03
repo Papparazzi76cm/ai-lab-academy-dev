@@ -144,6 +144,71 @@ export function getSafeVideoEmbedUrl(rawUrl: unknown): string | null {
   return null;
 }
 
+/**
+ * Validates and extracts safe Loom embed URL.
+ */
+export function getSafeLoomEmbedUrl(rawUrl: unknown): string | null {
+  const sanitized = sanitizeUrl(rawUrl, { allowRelative: false });
+  if (!sanitized) return null;
+  try {
+    const url = new URL(sanitized);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "loom.com") {
+      const match = url.pathname.match(/\/share\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        return `https://www.loom.com/embed/${match[1]}`;
+      }
+      if (url.pathname.startsWith("/embed/")) {
+        return sanitized;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Validates and extracts safe Canva embed URL.
+ */
+export function getSafeCanvaEmbedUrl(rawUrl: unknown): string | null {
+  const sanitized = sanitizeUrl(rawUrl, { allowRelative: false });
+  if (!sanitized) return null;
+  try {
+    const url = new URL(sanitized);
+    const host = url.hostname.toLowerCase();
+    if (host.includes("canva.com")) {
+      if (url.pathname.includes("/design/") && url.pathname.includes("/view")) {
+        return `${sanitized}?embed`;
+      }
+      if (url.pathname.includes("/design/")) {
+        return sanitized;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Validates and extracts safe Figma embed URL.
+ */
+export function getSafeFigmaEmbedUrl(rawUrl: unknown): string | null {
+  const sanitized = sanitizeUrl(rawUrl, { allowRelative: false });
+  if (!sanitized) return null;
+  try {
+    const url = new URL(sanitized);
+    const host = url.hostname.toLowerCase();
+    if (host.includes("figma.com")) {
+      return `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(sanitized)}`;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function isAllowedIframeUrl(rawUrl: unknown): boolean {
   const sanitized = sanitizeUrl(rawUrl, { allowRelative: false });
   if (!sanitized) return false;
@@ -162,6 +227,12 @@ export function isAllowedIframeUrl(rawUrl: unknown): boolean {
       "vimeo.com",
       "www.vimeo.com",
       "player.vimeo.com",
+      "loom.com",
+      "www.loom.com",
+      "canva.com",
+      "www.canva.com",
+      "figma.com",
+      "www.figma.com",
       "drive.google.com",
       "docs.google.com",
     ];

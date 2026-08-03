@@ -1,7 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AuthoringBlock, LessonVersion, VersionDiff, ModifiedBlockDiff } from "../types";
 
-export async function publishLesson(lessonId: string, commitMessage?: string) {
+export interface PublishResult {
+  success: boolean;
+  version_number?: number;
+  revision?: number;
+  published_at?: string;
+  errors?: Array<{ block_id?: string; field?: string; message: string }>;
+}
+
+export async function publishLesson(
+  lessonId: string,
+  commitMessage?: string,
+): Promise<PublishResult> {
   const { data, error } = await supabase.rpc("publish_lesson_rpc", {
     p_lesson_id: lessonId,
     p_commit_message: commitMessage || null,
@@ -11,30 +22,61 @@ export async function publishLesson(lessonId: string, commitMessage?: string) {
     throw new Error(error.message || "Error al publicar la lección.");
   }
 
-  return data;
-}
-
-export async function fetchLessonVersions(lessonId: string): Promise<LessonVersion[]> {
-  const { data, error } = await supabase
-    .from("lesson_versions")
-    .select("*")
-    .eq("lesson_id", lessonId)
-    .order("version_number", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching lesson versions:", error);
-    return [];
+  const result = data as PublishResult;
+  if (
+    result &&
+    result.success === false &&
+    Array.isArray(result.errors) &&
+    result.errors.length > 0
+  ) {
+    const errorDetails = result.errors
+      .map((e) => `• ${e.field || "Bloque"}: ${e.message}`)
+      .join("\n");
+    throw new Error(`Errores de validación en el servidor:\n${errorDetails}`);
   }
 
-  return (data || []).map((v) => ({
-    id: v.id,
-    lesson_id: v.lesson_id,
-    version_number: v.version_number,
-    blocks_snapshot: (v.blocks_snapshot as unknown as AuthoringBlock[]) || [],
-    commit_message: v.commit_message,
-    published_by: v.published_by,
-    created_at: v.created_at,
-  }));
+  return result;
+}
+
+export async function fetchLessonVersions(
+  lessonId: string,
+  limit: number = 10,
+  offset: number = 0,
+): Promise<{ total: number; versions: LessonVersion[] }> {
+  const { data, error } = await supabase.rpc("get_lesson_versions_rpc", {
+    p_lesson_id: lessonId,
+    p_limit: limit,
+    p_offset: offset,
+  });
+
+  if (error) {
+    console.error("Error fetching lesson versions via RPC, falling back to direct query:", error);
+    const { data: fallbackData, error: fallbackErr } = await supabase
+      .from("lesson_versions")
+      .select("*")
+      .eq("lesson_id", lessonId)
+      .order("version_number", { ascending: false });
+
+    if (fallbackErr) return { total: 0, versions: [] };
+
+    const mapped = (fallbackData || []).map((v) => ({
+      id: v.id,
+      lesson_id: v.lesson_id,
+      version_number: v.version_number,
+      blocks_snapshot: (v.blocks_snapshot as unknown as AuthoringBlock[]) || [],
+      commit_message: v.commit_message,
+      published_by: v.published_by,
+      created_at: v.created_at,
+    }));
+
+    return { total: mapped.length, versions: mapped };
+  }
+
+  const payload = data as { total: number; versions: LessonVersion[] };
+  return {
+    total: payload?.total || 0,
+    versions: payload?.versions || [],
+  };
 }
 
 export async function restoreLessonVersion(lessonId: string, versionNumber: number) {
@@ -61,7 +103,6 @@ export function compareLessonVersions(
   const removedBlocks: AuthoringBlock[] = [];
   const modifiedBlocks: ModifiedBlockDiff[] = [];
 
-  // Find added and modified
   newBlocks.forEach((newBlock) => {
     const oldBlock = oldMap.get(newBlock.id);
     if (!oldBlock) {
@@ -87,7 +128,6 @@ export function compareLessonVersions(
     }
   });
 
-  // Find removed
   oldBlocks.forEach((oldBlock) => {
     if (!newMap.has(oldBlock.id)) {
       removedBlocks.push(oldBlock);

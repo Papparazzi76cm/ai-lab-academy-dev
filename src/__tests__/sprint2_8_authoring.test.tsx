@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { BlockRegistry } from "@/lib/authoring/blocks/registry";
 import {
   createBlock,
@@ -8,16 +8,21 @@ import {
 } from "@/lib/authoring/blocks/factory";
 import { validateLesson } from "@/lib/authoring/validation/lessonValidation";
 import { compareLessonVersions } from "@/lib/authoring/publishing/publishingService";
+import { adaptRawBlock, adaptRawBlocks, normalizeBlockType } from "@/lib/authoring/blocks/adapter";
 import type { AuthoringBlock } from "@/lib/authoring/types";
 
 describe("Sprint 2.8 — Authoring Studio Core Engine Tests", () => {
-  it("BlockRegistry registers all 18 default block types", () => {
+  it("BlockRegistry registers all default block types with full metadata", () => {
     const all = BlockRegistry.getAll();
     expect(all.length).toBeGreaterThanOrEqual(18);
 
     const headingDef = BlockRegistry.get("heading");
     expect(headingDef).toBeDefined();
-    expect(headingDef?.name).toContain("Título");
+    expect(headingDef?.label).toContain("Título");
+    expect(headingDef?.editor).toBeDefined();
+    expect(headingDef?.renderer).toBeDefined();
+    expect(headingDef?.normalize).toBeDefined();
+    expect(headingDef?.migrate).toBeDefined();
 
     const embedDef = BlockRegistry.get("embed");
     expect(embedDef).toBeDefined();
@@ -26,17 +31,20 @@ describe("Sprint 2.8 — Authoring Studio Core Engine Tests", () => {
     expect(imageDef).toBeDefined();
   });
 
-  it("BlockFactory creates, duplicates, moves, and deletes blocks correctly", () => {
+  it("BlockFactory creates, duplicates, moves, and deletes blocks correctly with UUIDs", () => {
     const block1 = createBlock("heading", { text: "Título 1" }, { visibility: "visible" }, 0);
     const block2 = createBlock("paragraph", { text: "Párrafo 1" }, { visibility: "visible" }, 1);
 
     expect(block1.type).toBe("heading");
     expect(block1.position).toBe(0);
+    // UUID format check
+    expect(block1.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
     // Duplicate
     const dup = duplicateBlock(block1);
     expect(dup.type).toBe("heading");
     expect(dup.id).not.toBe(block1.id);
+    expect(dup.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(dup.position).toBe(1);
 
     // Move
@@ -51,6 +59,30 @@ describe("Sprint 2.8 — Authoring Studio Core Engine Tests", () => {
     const afterDelete = deleteBlock(moved, block1.id);
     expect(afterDelete.length).toBe(1);
     expect(afterDelete[0].id).toBe(block2.id);
+  });
+
+  it("Legacy block migration adapter converts legacy block structures seamlessly", () => {
+    const legacyRaw = [
+      { id: "blk_legacy_1", type: "h1", content_json: { text: "Título Antiguo" } },
+      { id: "blk_legacy_2", type: "text", content: { text: "Texto Antiguo" } },
+      { id: "invalid-id", type: "callout", content_json: { text: "Alerta" } },
+    ];
+
+    const adapted = adaptRawBlocks(legacyRaw);
+    expect(adapted).toHaveLength(3);
+
+    // Type normalization
+    expect(adapted[0].type).toBe("heading");
+    expect(adapted[0].position).toBe(0);
+    expect(adapted[0].id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+
+    expect(adapted[1].type).toBe("paragraph");
+    expect(adapted[1].position).toBe(1);
+
+    expect(adapted[2].type).toBe("warning");
+    expect(adapted[2].position).toBe(2);
   });
 
   it("validateLesson validates schemas, mandatory alt text, and embed provider whitelist", () => {

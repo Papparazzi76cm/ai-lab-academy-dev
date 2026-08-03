@@ -20,17 +20,18 @@ AI Lab Academy is a high-performance learning platform built with React, TypeScr
 - Courses, Modules, Lessons, Resources, and Lesson Progress.
 - RLS Policies enforcing active enrollments (`e.status = 'active'::enrollment_status`) for private course resources and lesson blocks.
 
-### 3. Visual Lesson Editor (Sprint 2.3 — Block Editor)
+### 3. Visual Lesson Editor & Authoring Studio (Sprint 2.3 & Sprint 2.8 Patch)
 
-- **Architecture**: Granular block-based editor (`public.lesson_blocks`).
-- **Storage**: JSON schema (`content_json`, `settings_json`) — no HTML/Markdown storage.
-- **Block Categories & Supported Types**:
-  - **Texto**: H1 (`h1`), H2 (`h2`), H3 (`h3`), Párrafo (`paragraph`), Lista con viñetas (`bullet_list`), Lista numerada (`numbered_list`), Cita (`quote`), Separador (`divider`).
-  - **Multimedia**: Imagen (`image`), YouTube (`youtube`), Vimeo (`vimeo`), Archivo de vídeo (`video_file`), Audio (`audio`), Galería (`gallery`).
-  - **Código**: Bloque de código (`code`) con selección de lenguaje, numeración de líneas y botón de copia.
-  - **Recursos**: Botón de descarga (`download_button`), Enlace externo (`external_link`), PDF incrustado (`pdf_embed`).
-  - **Educación**: Objetivos (`objectives`), Resumen (`summary`), Consejo (`tip`), Advertencia (`warning`), Ejercicio (`exercise`), Reto (`challenge`), Pregunta abierta (`open_question`).
-- **Features**: Drag & drop reordering, hover insertion divider, duplicate/delete/collapse actions, block settings modal, live preview tab, debounced autosaver, atomic reordering RPC.
+- **Architecture**: Granular block-based editor (`public.lesson_blocks`) with unified `BlockRegistry` engine.
+- **Storage**: Structured JSON schema (`content_json`, `settings_json`) with version snapshotting (`public.lesson_versions`).
+- **Transactional Persistence (RPC-Only Mutation Policy)**:
+  - Client applications cannot directly execute `DELETE` or `INSERT` queries on `lesson_blocks`.
+  - All block persistence operations are funneled through `save_lesson_blocks_rpc(p_lesson_id, p_blocks, p_expected_revision)` with strict optimistic locking via `lessons.revision`.
+  - Publishing is gated by `publish_lesson_rpc` which executes server-side URL security sanitization, mandatory accessibility checks (ALT text), and creates immutable version snapshots in `lesson_versions`.
+  - Rollback and restoration are handled atomically via `restore_lesson_version_rpc`.
+- **Supported Block Types**:
+  - `heading`, `paragraph`, `image`, `video`, `code`, `quote`, `callout`, `divider`, `button`, `checklist`, `accordion`, `tabs`, `gallery`, `file_download`, `embed`, `quiz_block`, `certificate_block`, `spacer`.
+- **Key Capabilities**: Drag & drop reordering (dnd-kit), 2-second debounced autosave, sequence counter stale response rejection, client UUID generation (`crypto.randomUUID()`), preview rendering via `LessonRenderer`, and version history manager.
 
 ### 4. Interactive Quizzes & Evaluation System (Sprint 2.6)
 

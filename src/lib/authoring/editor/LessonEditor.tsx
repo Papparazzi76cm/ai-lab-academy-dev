@@ -1,19 +1,20 @@
 import React, { useState } from "react";
-import type { AuthoringBlock } from "../types";
+import type { AuthoringBlock, BlockType, Visibility, LessonVersion } from "../types";
 import { useHistory } from "../history/useHistory";
 import { useAutosave } from "../autosave/useAutosave";
 import { BlockEditor } from "./BlockEditor";
 import { BlockToolbar } from "./BlockToolbar";
 import { OutlinePanel } from "./OutlinePanel";
 import { InspectorPanel } from "./InspectorPanel";
-import { BlockRegistry } from "../blocks/registry";
 import { createBlock, duplicateBlock, deleteBlock, moveBlock } from "../blocks/factory";
+import { adaptRawBlocks } from "../blocks/adapter";
 import {
   publishLesson,
   fetchLessonVersions,
   restoreLessonVersion,
 } from "../publishing/publishingService";
 import { validateLesson } from "../validation/lessonValidation";
+import { LessonRenderer } from "@/components/lesson/LessonRenderer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,26 +28,42 @@ import {
   Undo,
   Redo,
   Eye,
-  Save,
   Send,
   Plus,
   History,
   ArrowLeft,
-  ShieldCheck,
-  AlertTriangle,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 interface LessonEditorProps {
   lessonId: string;
   lessonTitle: string;
-  initialBlocks: AuthoringBlock[];
+  initialBlocks: unknown[];
+  initialRevision?: number;
   onBack?: () => void;
 }
 
-export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: LessonEditorProps) {
+export function LessonEditor({
+  lessonId,
+  lessonTitle,
+  initialBlocks,
+  initialRevision = 1,
+  onBack,
+}: LessonEditorProps) {
+  const normalizedInitialBlocks = adaptRawBlocks(initialBlocks);
   const { blocks, canUndo, canRedo, pushState, undo, redo, resetHistory } =
-    useHistory(initialBlocks);
-  const { status: autosaveStatus, lastSavedAt } = useAutosave(lessonId, blocks);
+    useHistory(normalizedInitialBlocks);
+
+  const [revision, setRevision] = useState<number>(initialRevision);
+
+  const {
+    status: autosaveStatus,
+    lastSavedAt,
+    saveNow,
+    flushPendingSave,
+    conflictMessage,
+  } = useAutosave(lessonId, blocks, revision, setRevision);
 
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(blocks[0]?.id || null);
   const [isPreview, setIsPreview] = useState(false);
@@ -56,9 +73,22 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
   const [commitMessage, setCommitMessage] = useState("");
   const [versions, setVersions] = useState<LessonVersion[]>([]);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId) || null;
   const validation = validateLesson(blocks);
+
+  const handleTogglePreview = async () => {
+    if (!isPreview) {
+      await flushPendingSave();
+    }
+    setIsPreview(!isPreview);
+  };
+
+  const handleBack = async () => {
+    await flushPendingSave();
+    if (onBack) onBack();
+  };
 
   const handleAddBlock = (type: BlockType) => {
     const newBlock = createBlock(type, undefined, undefined, blocks.length);
@@ -123,6 +153,7 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
   const handlePublishConfirm = async () => {
     setIsPublishing(true);
     try {
+      await flushPendingSave();
       await publishLesson(lessonId, commitMessage);
       setIsPublishModalOpen(false);
       setCommitMessage("");
@@ -136,18 +167,29 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
 
   const handleOpenHistory = async () => {
     setIsHistoryModalOpen(true);
-    const historyList = await fetchLessonVersions(lessonId);
-    setVersions(historyList);
+    setLoadingHistory(true);
+    try {
+      const res = await fetchLessonVersions(lessonId);
+      setVersions(res.versions);
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   const handleRestoreVersion = async (versionNumber: number) => {
-    if (!confirm(`¿Restaurar la versión v${versionNumber}? Perderás cambios no guardados.`)) return;
+    if (
+      !confirm(
+        `¿Restaurar la versión v${versionNumber}? Se creará un respaldo automático antes de restaurar.`,
+      )
+    )
+      return;
     try {
       await restoreLessonVersion(lessonId, versionNumber);
-      const historyList = await fetchLessonVersions(lessonId);
-      const targetVersion = historyList.find((v) => v.version_number === versionNumber);
+      const res = await fetchLessonVersions(lessonId);
+      setVersions(res.versions);
+      const targetVersion = res.versions.find((v) => v.version_number === versionNumber);
       if (targetVersion) {
-        resetHistory(targetVersion.blocks_snapshot);
+        resetHistory(adaptRawBlocks(targetVersion.blocks_snapshot));
       }
       setIsHistoryModalOpen(false);
     } catch (err: unknown) {
@@ -158,11 +200,29 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
 
   return (
     <div className="h-screen w-full flex flex-col bg-background overflow-hidden select-none">
+      {/* Revision conflict alert header banner */}
+      {conflictMessage && (
+        <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-2 flex items-center justify-between text-xs text-destructive font-medium shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{conflictMessage}</span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => window.location.reload()}
+            className="h-7 text-xs"
+          >
+            Recargar Página
+          </Button>
+        </div>
+      )}
+
       {/* Top Action Header */}
       <header className="h-14 border-b border-border bg-card px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           {onBack && (
-            <Button variant="ghost" size="sm" onClick={onBack}>
+            <Button variant="ghost" size="sm" onClick={handleBack}>
               <ArrowLeft className="size-4 mr-1" /> Volver
             </Button>
           )}
@@ -173,8 +233,10 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
             {autosaveStatus === "saving"
               ? "Guardando..."
               : autosaveStatus === "saved"
-                ? "Guardado"
-                : "Borrador"}
+                ? `Guardado (r${revision})`
+                : autosaveStatus === "conflict"
+                  ? "Conflicto"
+                  : "Borrador"}
           </span>
         </div>
 
@@ -200,8 +262,9 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
 
           <div className="h-4 w-px bg-border mx-1" />
 
-          <Button variant="outline" size="sm" onClick={() => setIsPreview(!isPreview)}>
-            <Eye className="size-4 mr-1.5" /> {isPreview ? "Volver a Edición" : "Vista Previa"}
+          <Button variant="outline" size="sm" onClick={handleTogglePreview}>
+            <Eye className="size-4 mr-1.5" />{" "}
+            {isPreview ? "Volver a Edición" : "Vista Previa Alumno"}
           </Button>
 
           <Button variant="outline" size="sm" onClick={handleOpenHistory}>
@@ -222,22 +285,17 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
       {/* Main Workspace Body */}
       {isPreview ? (
         <div className="flex-1 overflow-y-auto p-6 sm:p-12 max-w-4xl mx-auto w-full bg-background">
-          <div className="space-y-6">
-            {blocks.map((block) => {
-              const def = BlockRegistry.get(block.type);
-              if (!def) return null;
-              const Renderer = def.renderer;
-              return (
-                <Renderer
-                  key={block.id}
-                  block={block}
-                  content={block.content_json as unknown as Record<string, unknown>}
-                  settings={block.settings_json as unknown as Record<string, unknown>}
-                  isPreview={true}
-                />
-              );
-            })}
-          </div>
+          <LessonRenderer
+            lesson={{ id: lessonId, title: lessonTitle, slug: lessonId }}
+            blocks={blocks.map((b) => ({
+              id: b.id,
+              lesson_id: lessonId,
+              position: b.position,
+              type: b.type,
+              content_json: b.content_json,
+              settings_json: b.settings_json,
+            }))}
+          />
         </div>
       ) : (
         <div className="flex-1 flex overflow-hidden">
@@ -255,7 +313,7 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
             {blocks.length === 0 ? (
               <div className="p-12 border-2 border-dashed border-border rounded-2xl text-center space-y-4 my-12">
                 <p className="text-sm text-muted-foreground">
-                  Esta lección está vacía. Añade tu primer bloque.
+                  Esta lección está vacía. Añade tu primer bloque para comenzar.
                 </p>
                 <Button onClick={() => setIsAddModalOpen(true)}>
                   <Plus className="size-4 mr-1.5" /> Añadir Bloque Inicial
@@ -320,7 +378,8 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
           </DialogHeader>
           <div className="space-y-4 my-2">
             <p className="text-xs text-muted-foreground">
-              Al publicar se creará una versión snapshot inmutable en la base de datos.
+              Al publicar se creará una versión snapshot inmutable en la base de datos con
+              validación server-side.
             </p>
             <Input
               value={commitMessage}
@@ -333,7 +392,8 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
               Cancelar
             </Button>
             <Button onClick={handlePublishConfirm} disabled={isPublishing}>
-              {isPublishing ? "Publicando..." : "Confirmar Publicación"}
+              {isPublishing ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
+              {isPublishing ? "Validando y Publicando..." : "Confirmar Publicación"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -348,8 +408,12 @@ export function LessonEditor({ lessonId, lessonTitle, initialBlocks, onBack }: L
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-80 overflow-y-auto my-2">
-            {versions.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
+            {loadingHistory ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="size-6 animate-spin text-primary" />
+              </div>
+            ) : versions.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">
                 No hay publicaciones anteriores registradas.
               </p>
             ) : (

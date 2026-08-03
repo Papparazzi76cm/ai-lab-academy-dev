@@ -68,26 +68,22 @@
 - **Decision**: Created `public.verify_certificate_rpc` returning ONLY non-sensitive public metadata (`found`, `status`, `certificate_number`, `student_name`, `course_title`, `issued_at`, `completed_at`, `issuer`, `revocation_reason_public`).
 - **Justification**: Protects student personal data (no email, UUIDs, quiz scores, or internal storage paths exposed) while fulfilling verification needs.
 
-### Decision 4: Server-Side PDF Generation via Supabase Edge Function & Private Storage Bucket
+## Sprint 2.8 Patch — Authoring Studio Architecture, Atomicity & Security Patch
 
-- **Context**: Generating PDFs in client browsers allows canvas manipulation, exposes secret templates, and risks client-side tampering, while public bucket storage exposes official certificates to scraping.
-- **Decision**: Transferred official PDF generation exclusively to a Supabase Edge Function (`supabase/functions/generate-certificate-pdf/index.ts`). The function validates the user's JWT, verifies certificate ownership or admin privilege, rejects revoked/replaced certificates, generates the PDF and QR code entirely server-side, stores the PDF in a private Supabase Storage bucket (`certificates`), logs audit events via `private.record_certificate_event`, and returns temporary signed URLs (3600s).
-- **Justification**: Eliminates all client-side PDF generation vulnerabilities, enforces strict server authority over credential files, secures storage behind RLS policies, and guarantees audit trail integrity.
+### Decision 1: RPC-Only Mutation Policy & Elimination of Direct Client Table Writes
 
-### Decision 5: Automatic Server-Side Certificate Issuance via Learning Engine
+- **Context**: Performing direct `DELETE` and `INSERT` queries from client applications on `lesson_blocks` creates partial save risks, network race conditions, and bypasses server validation.
+- **Decision**: Enforced an RPC-only mutation policy for all Authoring Studio write operations via `save_lesson_blocks_rpc`.
+- **Justification**: Ensures that entire block arrays are validated, normalized, and replaced inside a single atomic PostgreSQL transaction.
 
-- **Context**: Relying on optional client requests to issue certificates after completing a course can lead to missing credentials or manual bypass attempts.
-- **Decision**: Integrated `private.issue_certificate_for_user` directly into the Learning Engine server progress sync (`sync_quiz_completion_progress` and `update_lesson_progress_rpc`). When a student reaches 100% course completion and passes all mandatory quizzes, the database server automatically triggers certificate issuance inside an advisory transactional lock (`pg_advisory_xact_lock`).
-- **Justification**: Guarantees immediate, reliable credential issuance as a direct consequence of learning completion without requiring explicit client invocation.
+### Decision 2: Optimistic Locking with Server-Side Revision Tracking
 
-### Decision 2: Transactional Server-Side Grading via RPC (`submit_quiz_attempt_rpc`)
+- **Context**: Concurrent authoring sessions by multiple instructors or browser tabs could overwrite each other's edits.
+- **Decision**: Added a `revision` column to `lessons`. `save_lesson_blocks_rpc` locks the lesson row (`FOR UPDATE`) and validates `p_expected_revision = revision`. If a mismatch occurs, it raises an explicit `REVISION_CONFLICT` exception without modifying data.
+- **Justification**: Protects authoring data against overwrite race conditions while providing explicit UI conflict resolution feedback.
 
-- **Context**: Grading quizzes client-side allows tampering with final scores, while multi-query server grading creates race conditions or partial updates.
-- **Decision**: Built `submit_quiz_attempt_rpc` as a transactional SQL function that evaluates student answers, calculates score percentages against quiz passing rules, updates the attempt record status to `submitted`, and triggers lesson/course progress synchronization in a single ACID transaction.
-- **Justification**: Ensures atomic evaluation, consistent score calculation (exact matches for multiple choice), and instant progress updates without race conditions.
+### Decision 3: Unified Block Engine & Legacy Data Adapter Pattern
 
-### Decision 3: Server-Synced Attempt Expiration & Real-Time Auto-Save Strategy
-
-- **Context**: Long-running quiz attempts with timer limits can drift across client devices or be lost if the user closes their browser before submitting.
-- **Decision**: Stored `expires_at` timestamps on `public.quiz_attempts` calculated server-side upon attempt creation (`start_quiz_attempt_rpc`). Created `save_quiz_answer_rpc` to auto-save selected options continuously during the quiz. Enforced auto-submission upon expiration both in the UI timer and during server grading.
-- **Justification**: Prevents timer manipulation by altering client clock time and guarantees zero data loss if a browser tab is accidentally reloaded or closed.
+- **Context**: Parallel block engines create schema drift, code duplication, and rendering inconsistencies between Authoring Studio and Student Lesson Player.
+- **Decision**: Established a single source of truth in `BlockRegistry` and created `adaptRawBlocks()` to seamlessly normalize legacy block types (`h1` -> `heading`, `text` -> `paragraph`, `callout` -> `warning`) and ensure client UUID stability.
+- **Justification**: Guarantees backwards compatibility with existing lessons while maintaining strict TypeScript typing and DRY component architecture.

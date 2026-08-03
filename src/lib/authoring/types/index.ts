@@ -2,22 +2,51 @@ import type { z } from "zod";
 import type { ComponentType } from "react";
 
 export type BlockType =
+  // Texto
   | "heading"
   | "paragraph"
-  | "image"
-  | "video"
-  | "code"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "text"
+  | "bullet_list"
+  | "numbered_list"
+  | "list"
   | "quote"
-  | "callout"
   | "divider"
+  // Multimedia
+  | "image"
+  | "youtube"
+  | "vimeo"
+  | "video_file"
+  | "video"
+  | "audio"
+  | "gallery"
+  // Código
+  | "code"
+  // Recursos & Interactivos
+  | "download_button"
   | "button"
+  | "external_link"
+  | "pdf_embed"
+  | "pdf"
   | "checklist"
   | "accordion"
   | "tabs"
-  | "gallery"
   | "file_download"
   | "embed"
+  // Educación
+  | "objectives"
+  | "summary"
+  | "tip"
+  | "warning"
+  | "callout"
+  | "exercise"
+  | "challenge"
+  | "open_question"
+  | "question"
   | "quiz_block"
+  | "quiz"
   | "certificate_block"
   | "spacer";
 
@@ -63,24 +92,37 @@ export interface BlockRendererProps<T = Record<string, unknown>> {
 
 export interface BlockDefinition {
   type: BlockType;
-  name: string;
+  label: string;
+  name: string; // Compatibility alias for label
   description: string;
   category: BlockCategory;
   iconName: string;
   editor: ComponentType<BlockEditorProps<never>>;
   renderer: ComponentType<BlockRendererProps<never>>;
-  validator: z.ZodSchema;
+  contentSchema: z.ZodSchema;
+  settingsSchema: z.ZodSchema;
+  validator: z.ZodSchema; // Compatibility alias for contentSchema
   defaultContent: Record<string, unknown>;
   defaultSettings: AuthoringBlockSettings;
+  normalize: (
+    content: Record<string, unknown>,
+    settings?: AuthoringBlockSettings,
+  ) => { content_json: Record<string, unknown>; settings_json: AuthoringBlockSettings };
+  migrate: (raw: Record<string, unknown>) => Record<string, unknown>;
 }
 
 export interface LessonVersion {
   id: string;
   lesson_id: string;
   version_number: number;
+  schema_version?: number;
+  revision?: number;
   blocks_snapshot: AuthoringBlock[];
   commit_message?: string | null;
+  reason?: string | null;
+  source?: string | null;
   published_by?: string | null;
+  created_by?: string | null;
   created_at: string;
 }
 
@@ -105,4 +147,4 @@ export interface VersionDiff {
   modifiedBlocks: ModifiedBlockDiff[];
 }
 
-export type AutosaveStatus = "idle" | "saving" | "saved" | "error";
+export type AutosaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";

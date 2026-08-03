@@ -1,77 +1,147 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { AuthoringBlock, AutosaveStatus } from "../types";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-export function useAutosave(lessonId: string | null, blocks: AuthoringBlock[]) {
+export interface UseAutosaveResult {
+  status: AutosaveStatus;
+  lastSavedAt: Date | null;
+  serverRevision: number;
+  saveNow: () => Promise<boolean>;
+  flushPendingSave: () => Promise<boolean>;
+  conflictMessage: string | null;
+}
+
+export function useAutosave(
+  lessonId: string | null,
+  blocks: AuthoringBlock[],
+  initialRevision: number = 1,
+  onRevisionUpdated?: (newRevision: number) => void,
+): UseAutosaveResult {
   const [status, setStatus] = useState<AutosaveStatus>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [serverRevision, setServerRevision] = useState<number>(initialRevision);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+
   const lastSavedBlocksRef = useRef<string>("");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const sequenceCounterRef = useRef<number>(0);
+  const currentLessonIdRef = useRef<string | null>(lessonId);
+  const blocksRef = useRef<AuthoringBlock[]>(blocks);
+  const serverRevisionRef = useRef<number>(initialRevision);
 
-  const saveBlocks = useCallback(
-    async (currentBlocks: AuthoringBlock[]) => {
-      if (!lessonId) return;
+  blocksRef.current = blocks;
+  serverRevisionRef.current = serverRevision;
 
-      const jsonString = JSON.stringify(currentBlocks);
-      if (jsonString === lastSavedBlocksRef.current) {
-        return;
+  // Reset when lessonId changes
+  useEffect(() => {
+    if (lessonId !== currentLessonIdRef.current) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      currentLessonIdRef.current = lessonId;
+      setServerRevision(initialRevision);
+      serverRevisionRef.current = initialRevision;
+      lastSavedBlocksRef.current = JSON.stringify(blocks);
+      setStatus("idle");
+      setConflictMessage(null);
+    }
+  }, [lessonId, initialRevision, blocks]);
+
+  const executeSave = useCallback(
+    async (blocksToSave: AuthoringBlock[]): Promise<boolean> => {
+      const activeLessonId = currentLessonIdRef.current;
+      if (!activeLessonId) return false;
+
+      const serialized = JSON.stringify(blocksToSave);
+      if (serialized === lastSavedBlocksRef.current && status === "saved") {
+        return true;
       }
 
+      // Increment sequence ID to discard stale out-of-order responses
+      const currentSeq = ++sequenceCounterRef.current;
       setStatus("saving");
 
       try {
-        // Re-map positions to ensure strictly sequential ordering
-        const payload = currentBlocks.map((b, idx) => ({
-          id: b.id.startsWith("blk_") ? undefined : b.id,
-          lesson_id: lessonId,
+        const payload = blocksToSave.map((b, idx) => ({
+          id: b.id,
+          lesson_id: activeLessonId,
           type: b.type,
           position: idx,
-          content_json: b.content_json as unknown as Record<string, unknown>,
-          settings_json: { ...b.settings_json, visibility: b.visibility } as unknown as Record<
-            string,
-            unknown
-          >,
-          updated_at: new Date().toISOString(),
+          content_json: b.content_json,
+          settings_json: { ...b.settings_json, visibility: b.visibility },
         }));
 
-        const { error: deleteErr } = await supabase
-          .from("lesson_blocks")
-          .delete()
-          .eq("lesson_id", lessonId);
+        const { data, error } = await supabase.rpc("save_lesson_blocks_rpc", {
+          p_lesson_id: activeLessonId,
+          p_blocks: payload,
+          p_expected_revision: serverRevisionRef.current,
+        });
 
-        if (deleteErr) throw deleteErr;
-
-        if (payload.length > 0) {
-          const { error: insertErr } = await supabase.from("lesson_blocks").insert(payload);
-          if (insertErr) throw insertErr;
+        // Ignore response if sequence or lesson changed during inflight request
+        if (
+          currentSeq !== sequenceCounterRef.current ||
+          activeLessonId !== currentLessonIdRef.current
+        ) {
+          return false;
         }
 
-        lastSavedBlocksRef.current = jsonString;
+        if (error) {
+          if (error.message.includes("REVISION_CONFLICT")) {
+            setStatus("conflict");
+            const conflictMsg =
+              "La lección fue modificada en otra sesión. Recarga para evitar sobrescribir cambios.";
+            setConflictMessage(conflictMsg);
+            toast.error("Conflicto de Edición", { description: conflictMsg });
+            return false;
+          }
+          throw error;
+        }
+
+        const newRevision = data?.revision ? Number(data.revision) : serverRevisionRef.current + 1;
+        setServerRevision(newRevision);
+        serverRevisionRef.current = newRevision;
+        if (onRevisionUpdated) {
+          onRevisionUpdated(newRevision);
+        }
+
+        lastSavedBlocksRef.current = serialized;
         setStatus("saved");
         setLastSavedAt(new Date());
+        setConflictMessage(null);
+        return true;
       } catch (err) {
-        console.error("Autosave failed:", err);
+        if (currentSeq !== sequenceCounterRef.current) return false;
+        console.error("Autosave error:", err);
         setStatus("error");
-        // Retry in 5s
-        setTimeout(() => {
-          saveBlocks(currentBlocks);
-        }, 5000);
+        toast.error("Error al guardar borrador de lección");
+        return false;
       }
     },
-    [lessonId],
+    [onRevisionUpdated, status],
   );
 
+  const flushPendingSave = useCallback(async (): Promise<boolean> => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    return await executeSave(blocksRef.current);
+  }, [executeSave]);
+
+  // Schedule debounced 2s autosave on change
   useEffect(() => {
     if (!lessonId) return;
 
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
+    const serialized = JSON.stringify(blocks);
+    if (serialized !== lastSavedBlocksRef.current && status !== "conflict") {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
 
-    const jsonString = JSON.stringify(blocks);
-    if (jsonString !== lastSavedBlocksRef.current) {
       timerRef.current = setTimeout(() => {
-        saveBlocks(blocks);
+        executeSave(blocksRef.current);
       }, 2000);
     }
 
@@ -80,20 +150,14 @@ export function useAutosave(lessonId: string | null, blocks: AuthoringBlock[]) {
         clearTimeout(timerRef.current);
       }
     };
-  }, [blocks, lessonId, saveBlocks]);
-
-  // Flush on unmount
-  useEffect(() => {
-    return () => {
-      if (blocks.length > 0 && lessonId) {
-        saveBlocks(blocks);
-      }
-    };
-  }, [blocks, lessonId, saveBlocks]);
+  }, [blocks, lessonId, status, executeSave]);
 
   return {
     status,
     lastSavedAt,
-    saveNow: () => saveBlocks(blocks),
+    serverRevision,
+    saveNow: () => executeSave(blocksRef.current),
+    flushPendingSave,
+    conflictMessage,
   };
 }

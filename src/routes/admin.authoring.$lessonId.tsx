@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LessonEditor } from "@/lib/authoring/editor/LessonEditor";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { AuthoringBlock, BlockType, Visibility } from "@/lib/authoring/types";
+import { adaptRawBlocks } from "@/lib/authoring/blocks/adapter";
 
 export const Route = createFileRoute("/admin/authoring/$lessonId")({
   head: () => ({
@@ -25,7 +25,7 @@ function AuthoringStudioRoute() {
     queryFn: async () => {
       const { data: lesson, error: lErr } = await supabase
         .from("lessons")
-        .select("id, title, course_id")
+        .select("id, title, course_id, revision")
         .eq("id", lessonId)
         .single();
 
@@ -39,24 +39,12 @@ function AuthoringStudioRoute() {
 
       if (bErr) throw bErr;
 
-      const mappedBlocks: AuthoringBlock[] = (blocks || []).map((b) => {
-        const settings = (b.settings_json as Record<string, unknown>) || {};
-        return {
-          id: b.id,
-          lesson_id: b.lesson_id,
-          type: b.type as BlockType,
-          position: b.position,
-          visibility: (settings.visibility as Visibility) || "visible",
-          content_json: (b.content_json as Record<string, unknown>) || {},
-          settings_json: settings,
-          created_at: b.created_at,
-          updated_at: b.updated_at,
-        };
-      });
+      const adapted = adaptRawBlocks(blocks || []);
 
       return {
         lesson,
-        blocks: mappedBlocks,
+        blocks: adapted,
+        revision: lesson.revision ? Number(lesson.revision) : 1,
       };
     },
   });
@@ -94,6 +82,7 @@ function AuthoringStudioRoute() {
       lessonId={lessonData.lesson.id}
       lessonTitle={lessonData.lesson.title}
       initialBlocks={lessonData.blocks}
+      initialRevision={lessonData.revision}
       onBack={() => navigate({ to: `/admin/courses/${lessonData.lesson.course_id}` })}
     />
   );

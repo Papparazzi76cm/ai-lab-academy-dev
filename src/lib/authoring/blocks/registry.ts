@@ -1,6 +1,14 @@
-import type { BlockDefinition, BlockType, BlockCategory } from "../types";
+import type {
+  BlockDefinition,
+  BlockType,
+  BlockCategory,
+  AuthoringBlockSettings,
+  BlockEditorProps,
+  BlockRendererProps,
+} from "../types";
 import { blockSchemas } from "./schemas";
 import { DEFAULT_BLOCK_CONTENTS, DEFAULT_BLOCK_SETTINGS } from "./factory";
+import { z } from "zod";
 
 import {
   HeadingEditor,
@@ -50,6 +58,31 @@ import {
   SpacerRenderer,
 } from "./renderers/BlockRenderers2";
 
+const defaultSettingsSchema = z
+  .object({
+    visibility: z.enum(["visible", "hidden", "instructor_only"]).default("visible"),
+    className: z.string().optional(),
+    paddingY: z.enum(["none", "small", "medium", "large"]).optional(),
+    backgroundColor: z.string().optional(),
+  })
+  .passthrough();
+
+function createStandardNormalize(defaultContent: Record<string, unknown>) {
+  return (content: Record<string, unknown>, settings?: AuthoringBlockSettings) => {
+    return {
+      content_json: { ...defaultContent, ...(content || {}) },
+      settings_json: {
+        visibility: settings?.visibility || "visible",
+        ...(settings || {}),
+      },
+    };
+  };
+}
+
+function createIdentityMigrate() {
+  return (raw: Record<string, unknown>) => raw || {};
+}
+
 class BlockRegistryImpl {
   private registry = new Map<BlockType, BlockDefinition>();
 
@@ -74,202 +107,211 @@ class BlockRegistryImpl {
   }
 
   private registerDefaults(): void {
-    const defaultDefinitions: BlockDefinition[] = [
+    const rawDefinitions: Array<{
+      type: BlockType;
+      label: string;
+      description: string;
+      category: BlockCategory;
+      iconName: string;
+      editor: React.ComponentType<BlockEditorProps<never>>;
+      renderer: React.ComponentType<BlockRendererProps<never>>;
+      schema: z.ZodSchema;
+      defaultContent: Record<string, unknown>;
+      migrate?: (raw: Record<string, unknown>) => Record<string, unknown>;
+    }> = [
       {
         type: "heading",
-        name: "Título / Encabezado",
+        label: "Título / Encabezado",
         description: "Título H1, H2 o H3 con alineación configurable",
         category: "text",
         iconName: "Heading",
         editor: HeadingEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: HeadingRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.heading,
+        schema: blockSchemas.heading,
         defaultContent: DEFAULT_BLOCK_CONTENTS.heading,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
+        migrate: (raw) => {
+          if (raw.text || raw.content) {
+            return {
+              text: String(raw.text || raw.content || ""),
+              level: Number(raw.level || 2),
+              alignment: String(raw.alignment || "left"),
+            };
+          }
+          return raw;
+        },
       },
       {
         type: "paragraph",
-        name: "Párrafo de Texto",
+        label: "Párrafo de Texto",
         description: "Bloque de texto explicativo con formato",
         category: "text",
         iconName: "Pilcrow",
         editor: ParagraphEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ParagraphRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.paragraph,
+        schema: blockSchemas.paragraph,
         defaultContent: DEFAULT_BLOCK_CONTENTS.paragraph,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
+        migrate: (raw) => {
+          if (typeof raw === "string") return { text: raw };
+          return { text: String(raw.text || raw.content || "") };
+        },
       },
       {
         type: "image",
-        name: "Imagen Ilustrativa",
+        label: "Imagen Ilustrativa",
         description: "Imagen con pie de foto y texto ALT obligatorio",
         category: "media",
         iconName: "Image",
         editor: ImageEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ImageRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.image,
+        schema: blockSchemas.image,
         defaultContent: DEFAULT_BLOCK_CONTENTS.image,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "video",
-        name: "Reproductor de Vídeo",
+        label: "Reproductor de Vídeo",
         description: "YouTube, Vimeo, HLS o almacenamiento Supabase",
         category: "media",
         iconName: "Video",
         editor: VideoEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: VideoRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.video,
+        schema: blockSchemas.video,
         defaultContent: DEFAULT_BLOCK_CONTENTS.video,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "code",
-        name: "Código Fuente",
+        label: "Código Fuente",
         description: "Bloque de código con resaltado y sintaxis",
         category: "text",
         iconName: "Code",
         editor: CodeEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: CodeRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.code,
+        schema: blockSchemas.code,
         defaultContent: DEFAULT_BLOCK_CONTENTS.code,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "quote",
-        name: "Cita / Destacado",
+        label: "Cita / Destacado",
         description: "Frase célebre o testimonio con autoría",
         category: "text",
         iconName: "Quote",
         editor: QuoteEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: QuoteRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.quote,
+        schema: blockSchemas.quote,
         defaultContent: DEFAULT_BLOCK_CONTENTS.quote,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "callout",
-        name: "Caja de Destacado / Alerta",
+        label: "Caja de Destacado / Alerta",
         description: "Mensaje resaltado de información, advertencia o éxito",
         category: "education",
         iconName: "Info",
         editor: CalloutEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: CalloutRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.callout,
+        schema: blockSchemas.callout,
         defaultContent: DEFAULT_BLOCK_CONTENTS.callout,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "divider",
-        name: "Separador",
+        label: "Separador",
         description: "Línea horizontal divisoria entre secciones",
         category: "text",
         iconName: "Minus",
         editor: DividerEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: DividerRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.divider,
+        schema: blockSchemas.divider,
         defaultContent: DEFAULT_BLOCK_CONTENTS.divider,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "button",
-        name: "Botón de Acción",
+        label: "Botón de Acción",
         description: "Enlace o llamada a la acción resaltada",
         category: "interactive",
         iconName: "MousePointerClick",
         editor: ButtonBlockEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ButtonBlockRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.button,
+        schema: blockSchemas.button,
         defaultContent: DEFAULT_BLOCK_CONTENTS.button,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "checklist",
-        name: "Lista de Verificación",
+        label: "Lista de Verificación",
         description: "Casillas interactivas para marcar avances",
         category: "interactive",
         iconName: "CheckSquare",
         editor: ChecklistEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: ChecklistRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.checklist,
+        schema: blockSchemas.checklist,
         defaultContent: DEFAULT_BLOCK_CONTENTS.checklist,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "accordion",
-        name: "Acordeón Desplegable",
+        label: "Acordeón Desplegable",
         description: "Secciones colapsables para preguntas o detalles",
         category: "interactive",
         iconName: "ListCollapse",
         editor: AccordionEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: AccordionRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.accordion,
+        schema: blockSchemas.accordion,
         defaultContent: DEFAULT_BLOCK_CONTENTS.accordion,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "tabs",
-        name: "Pestañas Contenido",
+        label: "Pestañas Contenido",
         description: "Organización de información por pestañas",
         category: "interactive",
         iconName: "FolderKanban",
         editor: TabsEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: TabsRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.tabs,
+        schema: blockSchemas.tabs,
         defaultContent: DEFAULT_BLOCK_CONTENTS.tabs,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "gallery",
-        name: "Galería de Imágenes",
+        label: "Galería de Imágenes",
         description: "Cuadrícula o carrusel de varias imágenes",
         category: "media",
         iconName: "Images",
         editor: GalleryEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: GalleryRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.gallery,
+        schema: blockSchemas.gallery,
         defaultContent: DEFAULT_BLOCK_CONTENTS.gallery,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "file_download",
-        name: "Archivo Descargable",
+        label: "Archivo Descargable",
         description: "Enlace a PDF, ZIP, DOCX o recursos del curso",
         category: "media",
         iconName: "FileDown",
         editor: FileDownloadEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: FileDownloadRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.file_download,
+        schema: blockSchemas.file_download,
         defaultContent: DEFAULT_BLOCK_CONTENTS.file_download,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "embed",
-        name: "Incrustado (Embed)",
+        label: "Incrustado (Embed)",
         description: "YouTube, Figma, Canva, Vimeo o Loom whitelist",
         category: "media",
         iconName: "Globe",
         editor: EmbedEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: EmbedRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.embed,
+        schema: blockSchemas.embed,
         defaultContent: DEFAULT_BLOCK_CONTENTS.embed,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "quiz_block",
-        name: "Evaluación Quiz",
+        label: "Evaluación Quiz",
         description: "Incrustar un cuestionario evaluativo",
         category: "education",
         iconName: "HelpCircle",
         editor: QuizBlockEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: QuizBlockRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.quiz_block,
+        schema: blockSchemas.quiz_block,
         defaultContent: DEFAULT_BLOCK_CONTENTS.quiz_block,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "certificate_block",
-        name: "Bloque de Certificado",
+        label: "Bloque de Certificado",
         description: "Aviso de acreditación oficial del curso",
         category: "education",
         iconName: "Award",
@@ -277,25 +319,42 @@ class BlockRegistryImpl {
         renderer: CertificateBlockRenderer as unknown as React.ComponentType<
           BlockRendererProps<never>
         >,
-        validator: blockSchemas.certificate_block,
+        schema: blockSchemas.certificate_block,
         defaultContent: DEFAULT_BLOCK_CONTENTS.certificate_block,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
       {
         type: "spacer",
-        name: "Espaciador Vertical",
+        label: "Espaciador Vertical",
         description: "Margen transparente para ajustar ritmo visual",
         category: "advanced",
         iconName: "Maximize2",
         editor: SpacerEditor as unknown as React.ComponentType<BlockEditorProps<never>>,
         renderer: SpacerRenderer as unknown as React.ComponentType<BlockRendererProps<never>>,
-        validator: blockSchemas.spacer,
+        schema: blockSchemas.spacer,
         defaultContent: DEFAULT_BLOCK_CONTENTS.spacer,
-        defaultSettings: DEFAULT_BLOCK_SETTINGS,
       },
     ];
 
-    defaultDefinitions.forEach((def) => this.register(def));
+    rawDefinitions.forEach((def) => {
+      const fullDefinition: BlockDefinition = {
+        type: def.type,
+        label: def.label,
+        name: def.label,
+        description: def.description,
+        category: def.category,
+        iconName: def.iconName,
+        editor: def.editor,
+        renderer: def.renderer,
+        contentSchema: def.schema,
+        settingsSchema: defaultSettingsSchema,
+        validator: def.schema,
+        defaultContent: def.defaultContent,
+        defaultSettings: DEFAULT_BLOCK_SETTINGS,
+        normalize: createStandardNormalize(def.defaultContent),
+        migrate: def.migrate || createIdentityMigrate(),
+      };
+      this.register(fullDefinition);
+    });
   }
 }
 

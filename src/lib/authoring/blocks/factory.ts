@@ -116,7 +116,7 @@ export function createBlock(
   initialSettings?: Partial<AuthoringBlockSettings>,
   position = 0,
 ): AuthoringBlock {
-  const id = `blk_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const id = crypto.randomUUID();
   return {
     id,
     type,
@@ -138,7 +138,7 @@ export function createBlock(
 export function cloneBlock(block: AuthoringBlock): AuthoringBlock {
   return {
     ...block,
-    id: `blk_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    id: crypto.randomUUID(),
     content_json: JSON.parse(JSON.stringify(block.content_json)),
     settings_json: JSON.parse(JSON.stringify(block.settings_json)),
     created_at: new Date().toISOString(),

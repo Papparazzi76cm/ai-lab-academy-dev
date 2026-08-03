@@ -1,9 +1,6 @@
 import type { LessonBlockItem, BlockType } from "@/lib/blocks";
+import { BlockRegistry } from "@/lib/authoring/blocks/registry";
 import { TextBlockRenderer } from "./renderers/TextBlockRenderer";
-import { MediaBlockRenderer } from "./renderers/MediaBlockRenderer";
-import { CodeBlockRenderer } from "./renderers/CodeBlockRenderer";
-import { ResourceBlockRenderer } from "./renderers/ResourceBlockRenderer";
-import { EducationBlockRenderer } from "./renderers/EducationBlockRenderer";
 
 export function BlockRenderer({ blocks }: { blocks: LessonBlockItem[] }) {
   if (!blocks || blocks.length === 0) {
@@ -23,53 +20,30 @@ export function BlockRenderer({ blocks }: { blocks: LessonBlockItem[] }) {
 
 function BlockView({ block }: { block: LessonBlockItem }) {
   const type: BlockType = block.type;
+  const definition = BlockRegistry.get(type);
 
-  switch (type) {
-    case "h1":
-    case "h2":
-    case "h3":
-    case "heading":
-    case "paragraph":
-    case "text":
-    case "bullet_list":
-    case "numbered_list":
-    case "list":
-    case "checklist":
-    case "quote":
-    case "divider":
-      return <TextBlockRenderer block={block} />;
+  if (definition && definition.renderer) {
+    const Component = definition.renderer;
+    const authoringBlock = {
+      id: block.id,
+      lesson_id: block.lesson_id,
+      type: block.type,
+      position: block.position,
+      visibility: "visible" as const,
+      content_json: block.content_json || {},
+      settings_json: block.settings_json || {},
+    };
 
-    case "image":
-    case "youtube":
-    case "vimeo":
-    case "video_file":
-    case "video":
-    case "audio":
-    case "gallery":
-      return <MediaBlockRenderer block={block} />;
-
-    case "code":
-      return <CodeBlockRenderer block={block} />;
-
-    case "download_button":
-    case "button":
-    case "external_link":
-    case "pdf_embed":
-    case "pdf":
-      return <ResourceBlockRenderer block={block} />;
-
-    case "objectives":
-    case "summary":
-    case "tip":
-    case "warning":
-    case "callout":
-    case "exercise":
-    case "challenge":
-    case "open_question":
-    case "question":
-      return <EducationBlockRenderer block={block} />;
-
-    default:
-      return <TextBlockRenderer block={block} />;
+    return (
+      <Component
+        block={authoringBlock}
+        content={block.content_json || {}}
+        settings={block.settings_json || {}}
+        isPreview={false}
+      />
+    );
   }
+
+  // Fallback to text block renderer for legacy unregistered types
+  return <TextBlockRenderer block={block} />;
 }
