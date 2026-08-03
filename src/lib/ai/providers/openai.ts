@@ -10,7 +10,7 @@ export class OpenAIProvider implements AIProvider {
   constructor(model = "gpt-4o", apiKey?: string) {
     this.model = model;
     this.apiKey =
-      apiKey || (typeof process !== "undefined" ? process.env?.OPENAI_API_KEY : undefined);
+      apiKey || (typeof process !== "undefined" ? process.env["OPENAI_API_KEY"] : undefined);
   }
 
   async countTokens(text: string): Promise<number> {
@@ -26,7 +26,7 @@ export class OpenAIProvider implements AIProvider {
     const systemInst = params.systemInstruction;
     const isMockMode =
       this.apiKey === "mock" ||
-      (typeof process !== "undefined" && process.env?.AI_MOCK_MODE === "true");
+      (typeof process !== "undefined" && process.env["AI_MOCK_MODE"] === "true");
 
     if (isMockMode) {
       return this.getMockResponse(params);
@@ -34,7 +34,8 @@ export class OpenAIProvider implements AIProvider {
 
     if (!this.apiKey) {
       const err = new Error("OPENAI_API_KEY no está configurada en las variables de entorno.");
-      (err as unknown as Record<string, string>).code = "PROVIDER_AUTH_ERROR";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_AUTH_ERROR";
       throw err;
     }
 
@@ -62,7 +63,8 @@ export class OpenAIProvider implements AIProvider {
         "Error de conexión con OpenAI: " +
           (netErr instanceof Error ? netErr.message : String(netErr)),
       );
-      (err as unknown as Record<string, string>).code = "PROVIDER_TIMEOUT";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_TIMEOUT";
       throw err;
     }
 
@@ -76,7 +78,8 @@ export class OpenAIProvider implements AIProvider {
       const err = new Error(
         `Error en OpenAI API (${response.status}): ${errText.substring(0, 200)}`,
       );
-      (err as unknown as Record<string, string>).code = code;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = code;
       throw err;
     }
 
@@ -85,7 +88,8 @@ export class OpenAIProvider implements AIProvider {
 
     if (!text.trim()) {
       const err = new Error("OpenAI devolvió una respuesta vacía.");
-      (err as unknown as Record<string, string>).code = "PROVIDER_INVALID_RESPONSE";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_INVALID_RESPONSE";
       throw err;
     }
 
@@ -106,47 +110,46 @@ export class OpenAIProvider implements AIProvider {
 
   private async getMockResponse(params: GenerateParams): Promise<ProviderResponse> {
     const prompt = params.prompt;
-    const systemInst = params.systemInstruction;
-    const tokensIn = await this.countTokens((systemInst || "") + " " + prompt);
-    let responseText = "";
+    const systemInst = params.systemInstruction || "";
+    let mockText = "";
 
-    if (params.responseFormat === "json") {
-      if (prompt.includes("PLANNER") || prompt.includes("planner")) {
-        responseText = JSON.stringify({
-          title: "Lección Creada con OpenAI Provider",
-          objectives: ["Aprender los conceptos fundamentales", "Implementar ejemplos prácticos"],
-          level: "Intermedio",
-          estimatedDurationMinutes: 20,
-          sections: [
-            {
-              id: "sec-1",
-              title: "Visión General",
-              purpose: "Explicar el contexto general.",
-              targetBlockTypes: ["heading", "paragraph"],
-              keyPoints: ["Punto 1", "Punto 2"],
-            },
-          ],
-          estimatedBlocksCount: 4,
-        });
-      } else {
-        responseText = JSON.stringify({
-          blocks: [
-            { type: "heading", content_json: { text: "Lección OpenAI", level: 1 } },
-            {
-              type: "paragraph",
-              content_json: { text: "Contenido generado mediante OpenAI API." },
-            },
-          ],
-        });
-      }
+    if (systemInst.includes("Planificador") || prompt.includes("Planific")) {
+      mockText = JSON.stringify({
+        title: "Lección OpenAI Mock: Desarrollo Ágil",
+        objectives: ["Aprender metodologías ágiles", "Usar Scrum en proyectos de IA"],
+        level: "Intermedio",
+        estimatedDurationMinutes: 15,
+        sections: [
+          {
+            id: "s1",
+            title: "Scrum y Sprinting",
+            purpose: "Fundamentos de trabajo iterativo",
+            targetBlockTypes: ["heading", "paragraph"],
+            keyPoints: ["Sprints", "Backlog"],
+          },
+        ],
+        estimatedBlocksCount: 4,
+      });
     } else {
-      responseText = "Respuesta de OpenAI.";
+      mockText = JSON.stringify({
+        blocks: [
+          {
+            type: "heading",
+            content_json: { text: "1. Metodologías Ágiles", level: 1 },
+          },
+          {
+            type: "paragraph",
+            content_json: { text: "Scrum es un marco de trabajo liviano..." },
+          },
+        ],
+      });
     }
 
-    const tokensOut = await this.countTokens(responseText);
+    const tokensIn = await this.countTokens(systemInst + " " + prompt);
+    const tokensOut = await this.countTokens(mockText);
 
     return {
-      text: responseText,
+      text: mockText,
       tokenUsage: {
         tokensInput: tokensIn,
         tokensOutput: tokensOut,

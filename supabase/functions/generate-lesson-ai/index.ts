@@ -49,6 +49,18 @@ function estimateCost(
   return (tokensIn / 1000) * rateIn + (tokensOut / 1000) * rateOut;
 }
 
+async function checkCancelled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  jobId: string,
+): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("generation_jobs")
+    .select("status")
+    .eq("id", jobId)
+    .maybeSingle();
+  return data?.status === "cancelled";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -239,8 +251,12 @@ serve(async (req) => {
     // 5. Sanitize Prompt
     const sanitizedPrompt = sanitizeText(rawPrompt);
 
-    // 6. Create Job in DB (Must succeed or abort)
-    const { data: jobRes, error: jobErr } = await supabaseAdmin.rpc("create_generation_job_rpc", {
+    // 6. Create Job in DB using RPC with authenticated user context
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+
+    const { data: jobRes, error: jobErr } = await userClient.rpc("create_generation_job_rpc", {
       p_lesson_id: lessonId,
       p_provider: provider,
       p_model: model,
@@ -266,6 +282,17 @@ serve(async (req) => {
       p_job_id: jobId,
       p_status: "running",
     });
+
+    // Cancellation check before planner / provider call
+    if (await checkCancelled(supabaseAdmin, jobId)) {
+      return new Response(
+        JSON.stringify({
+          error_code: "JOB_CANCELLED",
+          error_message: "El trabajo de generación fue cancelado.",
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // 7. Execute Provider
     const isMockMode = Deno.env.get("AI_MOCK_MODE") === "true";
@@ -561,6 +588,17 @@ serve(async (req) => {
       }
     }
 
+    // Cancellation check before repair & final response
+    if (await checkCancelled(supabaseAdmin, jobId)) {
+      return new Response(
+        JSON.stringify({
+          error_code: "JOB_CANCELLED",
+          error_message: "El trabajo de generación fue cancelado.",
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // 8. Auto-Repair and Schema Validation of Blocks
     const repairedBlocks: unknown[] = [];
     for (const b of blocks) {
@@ -576,6 +614,17 @@ serve(async (req) => {
     const durationMs = Date.now() - startTime;
     const estimatedCostVal = estimateCost(provider, model, tokensIn, tokensOut);
 
+    // Final cancellation check before committing completion
+    if (await checkCancelled(supabaseAdmin, jobId)) {
+      return new Response(
+        JSON.stringify({
+          error_code: "JOB_CANCELLED",
+          error_message: "El trabajo de generación fue cancelado.",
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // 9. Update Job to 'completed'
     await supabaseAdmin.rpc("update_generation_job_rpc", {
       p_job_id: jobId,
@@ -584,6 +633,8 @@ serve(async (req) => {
       p_tokens_output: tokensOut,
       p_estimated_cost: estimatedCostVal,
       p_created_blocks: repairedBlocks.length,
+      p_repair_count: repairCount,
+      p_duration_ms: durationMs,
       p_metadata: { duration_ms: durationMs, repair_count: repairCount },
     });
 
@@ -613,16 +664,13 @@ serve(async (req) => {
 });
 
 async function markJobFailed(
-  supabaseAdmin: unknown,
+  supabaseAdmin: ReturnType<typeof createClient>,
   jobId: string,
   errorCode: string,
   errorMessage: string,
 ) {
   try {
-    const client = supabaseAdmin as {
-      rpc: (name: string, args: Record<string, unknown>) => Promise<unknown>;
-    };
-    await client.rpc("update_generation_job_rpc", {
+    await supabaseAdmin.rpc("update_generation_job_rpc", {
       p_job_id: jobId,
       p_status: "failed",
       p_error_code: errorCode,

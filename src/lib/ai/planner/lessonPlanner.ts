@@ -49,7 +49,7 @@ export class LessonPlanner {
     partialJson?: Record<string, unknown>,
   ): LessonPlan {
     const title =
-      (typeof partialJson?.title === "string" && partialJson.title) ||
+      (typeof partialJson?.["title"] === "string" && partialJson["title"]) ||
       context?.lessonTitle ||
       `Lección: ${prompt.slice(0, 40)}`;
 

@@ -10,7 +10,7 @@ export class AnthropicProvider implements AIProvider {
   constructor(model = "claude-3-5-sonnet-20241022", apiKey?: string) {
     this.model = model;
     this.apiKey =
-      apiKey || (typeof process !== "undefined" ? process.env?.ANTHROPIC_API_KEY : undefined);
+      apiKey || (typeof process !== "undefined" ? process.env["ANTHROPIC_API_KEY"] : undefined);
   }
 
   async countTokens(text: string): Promise<number> {
@@ -26,7 +26,7 @@ export class AnthropicProvider implements AIProvider {
     const systemInst = params.systemInstruction;
     const isMockMode =
       this.apiKey === "mock" ||
-      (typeof process !== "undefined" && process.env?.AI_MOCK_MODE === "true");
+      (typeof process !== "undefined" && process.env["AI_MOCK_MODE"] === "true");
 
     if (isMockMode) {
       return this.getMockResponse(params);
@@ -34,7 +34,8 @@ export class AnthropicProvider implements AIProvider {
 
     if (!this.apiKey) {
       const err = new Error("ANTHROPIC_API_KEY no está configurada en las variables de entorno.");
-      (err as unknown as Record<string, string>).code = "PROVIDER_AUTH_ERROR";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_AUTH_ERROR";
       throw err;
     }
 
@@ -60,7 +61,8 @@ export class AnthropicProvider implements AIProvider {
         "Error de conexión con Anthropic: " +
           (netErr instanceof Error ? netErr.message : String(netErr)),
       );
-      (err as unknown as Record<string, string>).code = "PROVIDER_TIMEOUT";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_TIMEOUT";
       throw err;
     }
 
@@ -74,7 +76,8 @@ export class AnthropicProvider implements AIProvider {
       const err = new Error(
         `Error en Anthropic API (${response.status}): ${errText.substring(0, 200)}`,
       );
-      (err as unknown as Record<string, string>).code = code;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = code;
       throw err;
     }
 
@@ -83,7 +86,8 @@ export class AnthropicProvider implements AIProvider {
 
     if (!text.trim()) {
       const err = new Error("Anthropic devolvió una respuesta vacía.");
-      (err as unknown as Record<string, string>).code = "PROVIDER_INVALID_RESPONSE";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_INVALID_RESPONSE";
       throw err;
     }
 
@@ -104,47 +108,46 @@ export class AnthropicProvider implements AIProvider {
 
   private async getMockResponse(params: GenerateParams): Promise<ProviderResponse> {
     const prompt = params.prompt;
-    const systemInst = params.systemInstruction;
-    const tokensIn = await this.countTokens((systemInst || "") + " " + prompt);
-    let responseText = "";
+    const systemInst = params.systemInstruction || "";
+    let mockText = "";
 
-    if (params.responseFormat === "json") {
-      if (prompt.includes("PLANNER") || prompt.includes("planner")) {
-        responseText = JSON.stringify({
-          title: "Lección Creada con Anthropic Claude",
-          objectives: ["Comprensión profunda", "Aplicación guiada"],
-          level: "Avanzado",
-          estimatedDurationMinutes: 30,
-          sections: [
-            {
-              id: "sec-1",
-              title: "Análisis Arquitectónico",
-              purpose: "Profundizar en la estructura.",
-              targetBlockTypes: ["heading", "paragraph", "code"],
-              keyPoints: ["Arquitectura de agentes", "Pipeline de validación"],
-            },
-          ],
-          estimatedBlocksCount: 5,
-        });
-      } else {
-        responseText = JSON.stringify({
-          blocks: [
-            { type: "heading", content_json: { text: "Lección Anthropic", level: 1 } },
-            {
-              type: "paragraph",
-              content_json: { text: "Contenido generado mediante Anthropic API." },
-            },
-          ],
-        });
-      }
+    if (systemInst.includes("Planificador") || prompt.includes("Planific")) {
+      mockText = JSON.stringify({
+        title: "Lección Claude: Fundamentos de IA",
+        objectives: ["Aprender Claude API", "Construir flujos de trabajo"],
+        level: "Avanzado",
+        estimatedDurationMinutes: 25,
+        sections: [
+          {
+            id: "s1",
+            title: "Prompting con Claude",
+            purpose: "Técnicas avanzadas",
+            targetBlockTypes: ["heading", "paragraph"],
+            keyPoints: ["System prompts", "XML tags"],
+          },
+        ],
+        estimatedBlocksCount: 5,
+      });
     } else {
-      responseText = "Respuesta de Anthropic Claude.";
+      mockText = JSON.stringify({
+        blocks: [
+          {
+            type: "heading",
+            content_json: { text: "1. Prompting Avanzado", level: 1 },
+          },
+          {
+            type: "paragraph",
+            content_json: { text: "Usar etiquetas XML ayuda a Claude a estructurar respuestas..." },
+          },
+        ],
+      });
     }
 
-    const tokensOut = await this.countTokens(responseText);
+    const tokensIn = await this.countTokens(systemInst + " " + prompt);
+    const tokensOut = await this.countTokens(mockText);
 
     return {
-      text: responseText,
+      text: mockText,
       tokenUsage: {
         tokensInput: tokensIn,
         tokensOutput: tokensOut,

@@ -11,262 +11,213 @@ CREATE TEMP TABLE IF NOT EXISTS test_results (
   details TEXT
 );
 
--- Ensure generation_jobs table exists for testing environment
-CREATE TABLE IF NOT EXISTS public.generation_jobs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  lesson_id UUID REFERENCES public.lessons(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL,
-  provider TEXT NOT NULL,
-  model TEXT NOT NULL,
-  prompt TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
-  started_at TIMESTAMPTZ DEFAULT now(),
-  finished_at TIMESTAMPTZ,
-  tokens_input INT DEFAULT 0,
-  tokens_output INT DEFAULT 0,
-  estimated_cost NUMERIC(10, 6) DEFAULT 0,
-  created_blocks INT DEFAULT 0,
-  metadata JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_lesson_id ON public.generation_jobs(lesson_id);
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_user_id ON public.generation_jobs(user_id);
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_status ON public.generation_jobs(status);
-CREATE INDEX IF NOT EXISTS idx_generation_jobs_created_at ON public.generation_jobs(created_at);
-
--- Create RPC Functions if not existing in DB session
-CREATE OR REPLACE FUNCTION public.create_generation_job_rpc(
-  p_lesson_id UUID,
-  p_provider TEXT,
-  p_model TEXT,
-  p_prompt TEXT,
-  p_metadata JSONB DEFAULT '{}'::jsonb
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_user_id UUID := COALESCE(auth.uid(), '00000000-0000-0000-0000-000000000001'::UUID);
-  v_job_id UUID;
-BEGIN
-  INSERT INTO public.generation_jobs (
-    lesson_id,
-    user_id,
-    provider,
-    model,
-    prompt,
-    status,
-    started_at,
-    metadata
-  ) VALUES (
-    p_lesson_id,
-    v_user_id,
-    p_provider,
-    p_model,
-    p_prompt,
-    'queued',
-    now(),
-    p_metadata
-  )
-  RETURNING id INTO v_job_id;
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'job_id', v_job_id,
-    'status', 'queued'
-  );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.update_generation_job_rpc(
-  p_job_id UUID,
-  p_status TEXT,
-  p_tokens_input INT DEFAULT 0,
-  p_tokens_output INT DEFAULT 0,
-  p_estimated_cost NUMERIC DEFAULT 0,
-  p_created_blocks INT DEFAULT 0,
-  p_metadata JSONB DEFAULT '{}'::jsonb
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_finished_at TIMESTAMPTZ := CASE WHEN p_status IN ('completed', 'failed', 'cancelled') THEN now() ELSE NULL END;
-BEGIN
-  UPDATE public.generation_jobs
-  SET
-    status = p_status,
-    tokens_input = COALESCE(p_tokens_input, tokens_input),
-    tokens_output = COALESCE(p_tokens_output, tokens_output),
-    estimated_cost = COALESCE(p_estimated_cost, estimated_cost),
-    created_blocks = COALESCE(p_created_blocks, created_blocks),
-    finished_at = COALESCE(v_finished_at, finished_at),
-    metadata = metadata || COALESCE(p_metadata, '{}'::jsonb)
-  WHERE id = p_job_id;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'message', 'Job not found');
-  END IF;
-
-  RETURN jsonb_build_object('success', true, 'job_id', p_job_id, 'status', p_status);
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.cancel_generation_job_rpc(
-  p_job_id UUID
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE public.generation_jobs
-  SET
-    status = 'cancelled',
-    finished_at = now()
-  WHERE id = p_job_id;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'message', 'Job not found');
-  END IF;
-
-  RETURN jsonb_build_object('success', true, 'job_id', p_job_id, 'status', 'cancelled');
-END;
-$$;
-
 -- ----------------------------------------------------------------------------
--- Test 1: Job Creation via create_generation_job_rpc
+-- Test 1: Verify Table and Index Structure
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
+  v_table_exists BOOLEAN;
+  v_rls_enabled BOOLEAN;
+  v_idx_count INT;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'generation_jobs'
+  ) INTO v_table_exists;
+
+  IF NOT v_table_exists THEN
+    RAISE EXCEPTION 'Test 1 Failed: public.generation_jobs table does not exist';
+  END IF;
+
+  SELECT relrowsecurity INTO v_rls_enabled
+  FROM pg_class
+  WHERE oid = 'public.generation_jobs'::regclass;
+
+  IF NOT v_rls_enabled THEN
+    RAISE EXCEPTION 'Test 1 Failed: RLS is not enabled on public.generation_jobs';
+  END IF;
+
+  SELECT COUNT(*) INTO v_idx_count
+  FROM pg_indexes
+  WHERE tablename = 'generation_jobs' AND schemaname = 'public';
+
+  IF v_idx_count < 4 THEN
+    RAISE EXCEPTION 'Test 1 Failed: Expected at least 4 indexes on generation_jobs, found %', v_idx_count;
+  END IF;
+
+  INSERT INTO test_results VALUES ('Test 1: Schema & Indexes Verification', TRUE, 'generation_jobs table, RLS and indexes verified');
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- Test 2: Function Permissions & Grants Verification
+-- ----------------------------------------------------------------------------
+DO $$
+DECLARE
+  v_anon_can_create BOOLEAN;
+  v_auth_can_update BOOLEAN;
+BEGIN
+  -- Verify anon cannot execute create_generation_job_rpc
+  SELECT has_function_privilege('anon', 'public.create_generation_job_rpc(UUID, TEXT, TEXT, TEXT, JSONB)', 'EXECUTE')
+  INTO v_anon_can_create;
+
+  IF v_anon_can_create THEN
+    RAISE EXCEPTION 'Test 2 Failed: anon role has EXECUTE on create_generation_job_rpc';
+  END IF;
+
+  -- Verify authenticated cannot directly execute update_generation_job_rpc
+  SELECT has_function_privilege('authenticated', 'public.update_generation_job_rpc(UUID, TEXT, INT, INT, NUMERIC, INT, INT, INT, TEXT, TEXT, JSONB)', 'EXECUTE')
+  INTO v_auth_can_update;
+
+  IF v_auth_can_update THEN
+    RAISE EXCEPTION 'Test 2 Failed: authenticated role has EXECUTE on update_generation_job_rpc (should be service_role only)';
+  END IF;
+
+  INSERT INTO test_results VALUES ('Test 2: Function Permissions & Grants', TRUE, 'RPC execute privileges strictly enforced');
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- Test 3: Job Lifecycle & State Transitions via RPCs
+-- ----------------------------------------------------------------------------
+DO $$
+DECLARE
+  v_course_id UUID := gen_random_uuid();
   v_lesson_id UUID := gen_random_uuid();
-  v_res JSONB;
+  v_instructor_id UUID := gen_random_uuid();
+  v_create_res JSONB;
+  v_update_res JSONB;
+  v_cancel_res JSONB;
   v_job_id UUID;
   v_status TEXT;
+  v_sanitized_prompt TEXT;
+  v_error_caught BOOLEAN := FALSE;
 BEGIN
-  -- Seed test lesson
-  INSERT INTO public.lessons (id, title, revision, slug)
-  VALUES (v_lesson_id, 'AI Lesson Job Test', 1, 'ai-lesson-job-test')
+  -- Seed test course and lesson
+  INSERT INTO public.courses (id, title, slug, instructor_id)
+  VALUES (v_course_id, 'Test Course', 'test-course-sprint29', v_instructor_id)
   ON CONFLICT DO NOTHING;
 
+  INSERT INTO public.lessons (id, course_id, title, revision, slug)
+  VALUES (v_lesson_id, v_course_id, 'Test Lesson', 1, 'test-lesson-sprint29')
+  ON CONFLICT DO NOTHING;
+
+  -- Set auth context to instructor
+  PERFORM set_config('request.jwt.claim.sub', v_instructor_id::text, true);
+
+  -- Create Job
   SELECT public.create_generation_job_rpc(
     p_lesson_id := v_lesson_id,
     p_provider := 'gemini',
     p_model := 'gemini-3.6-flash',
-    p_prompt := 'Genera una lección sobre React Hooks',
-    p_metadata := '{"tone": "practical"}'::jsonb
-  ) INTO v_res;
+    p_prompt := 'Aprender React con user@example.com y UUID 12345678-1234-1234-1234-123456789abc',
+    p_metadata := '{"context": "test"}'::jsonb
+  ) INTO v_create_res;
 
-  IF (v_res->>'success')::boolean IS NOT TRUE THEN
-    RAISE EXCEPTION 'Test 1 Failed: create_generation_job_rpc returned success=false';
+  IF (v_create_res->>'success')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'Test 3 Failed: create_generation_job_rpc failed';
   END IF;
 
-  v_job_id := (v_res->>'job_id')::UUID;
+  v_job_id := (v_create_res->>'job_id')::UUID;
 
-  SELECT status INTO v_status
+  -- Verify prompt sanitization in DB
+  SELECT prompt INTO v_sanitized_prompt
   FROM public.generation_jobs
   WHERE id = v_job_id;
 
-  IF v_status <> 'queued' THEN
-    RAISE EXCEPTION 'Test 1 Failed: Expected status queued, got %', v_status;
+  IF v_sanitized_prompt LIKE '%user@example.com%' OR v_sanitized_prompt LIKE '%12345678-1234-1234-1234-123456789abc%' THEN
+    RAISE EXCEPTION 'Test 3 Failed: Sensitive emails or UUIDs were not sanitized in prompt';
   END IF;
 
-  INSERT INTO test_results VALUES ('Test 1: Create Generation Job RPC', TRUE, 'Job created in queued state');
+  -- Update to running
+  SELECT public.update_generation_job_rpc(
+    p_job_id := v_job_id,
+    p_status := 'running'
+  ) INTO v_update_res;
+
+  -- Update to completed
+  SELECT public.update_generation_job_rpc(
+    p_job_id := v_job_id,
+    p_status := 'completed',
+    p_tokens_input := 100,
+    p_tokens_output := 200,
+    p_estimated_cost := 0.001,
+    p_created_blocks := 5,
+    p_repair_count := 0,
+    p_duration_ms := 1200
+  ) INTO v_update_res;
+
+  SELECT status INTO v_status FROM public.generation_jobs WHERE id = v_job_id;
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'Test 3 Failed: Job status expected completed, got %', v_status;
+  END IF;
+
+  -- Verify terminal transition prevention (cannot transition from completed to queued)
+  BEGIN
+    PERFORM public.update_generation_job_rpc(
+      p_job_id := v_job_id,
+      p_status := 'queued'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_error_caught := TRUE;
+  END;
+
+  IF NOT v_error_caught THEN
+    RAISE EXCEPTION 'Test 3 Failed: Terminal state transition to queued was not rejected';
+  END IF;
+
+  -- Verify completed job cancellation attempt (returns graceful fail/current status)
+  SELECT public.cancel_generation_job_rpc(p_job_id := v_job_id) INTO v_cancel_res;
+  IF (v_cancel_res->>'success')::boolean IS TRUE AND (v_cancel_res->>'status') = 'cancelled' THEN
+    RAISE EXCEPTION 'Test 3 Failed: Completed job was incorrectly changed to cancelled';
+  END IF;
+
+  INSERT INTO test_results VALUES ('Test 3: Job Lifecycle & State Transitions', TRUE, 'Job creation, sanitization, updates and terminal state checks verified');
 END $$;
 
 -- ----------------------------------------------------------------------------
--- Test 2: Job Progress Update & Status Transition via update_generation_job_rpc
+-- Test 4: Idempotent Cancellation
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
+  v_course_id UUID := gen_random_uuid();
   v_lesson_id UUID := gen_random_uuid();
+  v_instructor_id UUID := gen_random_uuid();
   v_create_res JSONB;
-  v_update_res JSONB;
+  v_cancel1 JSONB;
+  v_cancel2 JSONB;
   v_job_id UUID;
-  v_job_rec RECORD;
 BEGIN
-  INSERT INTO public.lessons (id, title, revision, slug)
-  VALUES (v_lesson_id, 'AI Lesson Update Test', 1, 'ai-lesson-update-test')
+  INSERT INTO public.courses (id, title, slug, instructor_id)
+  VALUES (v_course_id, 'Cancel Course', 'cancel-course-sprint29', v_instructor_id)
   ON CONFLICT DO NOTHING;
+
+  INSERT INTO public.lessons (id, course_id, title, revision, slug)
+  VALUES (v_lesson_id, v_course_id, 'Cancel Lesson', 1, 'cancel-lesson-sprint29')
+  ON CONFLICT DO NOTHING;
+
+  PERFORM set_config('request.jwt.claim.sub', v_instructor_id::text, true);
 
   SELECT public.create_generation_job_rpc(
     p_lesson_id := v_lesson_id,
     p_provider := 'openai',
     p_model := 'gpt-4o',
-    p_prompt := 'Genera una lección de TypeScript Avanzado'
+    p_prompt := 'Lección para cancelar'
   ) INTO v_create_res;
 
   v_job_id := (v_create_res->>'job_id')::UUID;
 
-  SELECT public.update_generation_job_rpc(
-    p_job_id := v_job_id,
-    p_status := 'completed',
-    p_tokens_input := 1250,
-    p_tokens_output := 3400,
-    p_estimated_cost := 0.042500,
-    p_created_blocks := 8,
-    p_metadata := '{"repair_count": 1}'::jsonb
-  ) INTO v_update_res;
-
-  IF (v_update_res->>'success')::boolean IS NOT TRUE THEN
-    RAISE EXCEPTION 'Test 2 Failed: update_generation_job_rpc returned success=false';
+  -- First cancel
+  SELECT public.cancel_generation_job_rpc(p_job_id := v_job_id) INTO v_cancel1;
+  IF (v_cancel1->>'status') <> 'cancelled' THEN
+    RAISE EXCEPTION 'Test 4 Failed: First cancel call did not set status to cancelled';
   END IF;
 
-  SELECT * INTO v_job_rec FROM public.generation_jobs WHERE id = v_job_id;
-
-  IF v_job_rec.status <> 'completed' OR v_job_rec.tokens_input <> 1250 OR v_job_rec.tokens_output <> 3400 OR v_job_rec.created_blocks <> 8 THEN
-    RAISE EXCEPTION 'Test 2 Failed: Record fields did not update properly';
+  -- Second cancel (Idempotent)
+  SELECT public.cancel_generation_job_rpc(p_job_id := v_job_id) INTO v_cancel2;
+  IF (v_cancel2->>'success')::boolean IS NOT TRUE OR (v_cancel2->>'status') <> 'cancelled' THEN
+    RAISE EXCEPTION 'Test 4 Failed: Second cancel call failed or did not return status cancelled';
   END IF;
 
-  IF v_job_rec.finished_at IS NULL THEN
-    RAISE EXCEPTION 'Test 2 Failed: finished_at was not populated on completion';
-  END IF;
-
-  INSERT INTO test_results VALUES ('Test 2: Update Generation Job RPC', TRUE, 'Job transitioned to completed with telemetry stats');
-END $$;
-
--- ----------------------------------------------------------------------------
--- Test 3: Job Cancellation via cancel_generation_job_rpc
--- ----------------------------------------------------------------------------
-DO $$
-DECLARE
-  v_lesson_id UUID := gen_random_uuid();
-  v_create_res JSONB;
-  v_cancel_res JSONB;
-  v_job_id UUID;
-  v_status TEXT;
-BEGIN
-  INSERT INTO public.lessons (id, title, revision, slug)
-  VALUES (v_lesson_id, 'AI Lesson Cancel Test', 1, 'ai-lesson-cancel-test')
-  ON CONFLICT DO NOTHING;
-
-  SELECT public.create_generation_job_rpc(
-    p_lesson_id := v_lesson_id,
-    p_provider := 'anthropic',
-    p_model := 'claude-3-5-sonnet',
-    p_prompt := 'Prompt para cancelar'
-  ) INTO v_create_res;
-
-  v_job_id := (v_create_res->>'job_id')::UUID;
-
-  SELECT public.cancel_generation_job_rpc(
-    p_job_id := v_job_id
-  ) INTO v_cancel_res;
-
-  IF (v_cancel_res->>'success')::boolean IS NOT TRUE THEN
-    RAISE EXCEPTION 'Test 3 Failed: cancel_generation_job_rpc returned success=false';
-  END IF;
-
-  SELECT status INTO v_status FROM public.generation_jobs WHERE id = v_job_id;
-
-  IF v_status <> 'cancelled' THEN
-    RAISE EXCEPTION 'Test 3 Failed: Expected status cancelled, got %', v_status;
-  END IF;
-
-  INSERT INTO test_results VALUES ('Test 3: Cancel Generation Job RPC', TRUE, 'Job successfully cancelled');
+  INSERT INTO test_results VALUES ('Test 4: Idempotent Cancellation', TRUE, 'Repeated cancel call handled idempotently');
 END $$;
 
 SELECT * FROM test_results;

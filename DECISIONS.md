@@ -107,4 +107,3 @@
 - **Context**: AI models occasionally output slightly malformed block structures (e.g. missing ALT attribute on images, empty heading text, unregistered legacy types).
 - **Decision**: Built an auto-repair validator (`autoRepairBlocks`) that automatically fixes minor structural defects against `BlockRegistry` Zod schemas, logs repair entries for telemetry, and ensures 100% schema compliance before block preview or insertion.
 - **Justification**: Guarantees that AI-generated blocks never crash the editor or lesson player, providing a reliable and friction-free user experience.
-

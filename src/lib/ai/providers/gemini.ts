@@ -10,7 +10,7 @@ export class GeminiProvider implements AIProvider {
   constructor(model = "gemini-3.6-flash", apiKey?: string) {
     this.model = model;
     this.apiKey =
-      apiKey || (typeof process !== "undefined" ? process.env?.GEMINI_API_KEY : undefined);
+      apiKey || (typeof process !== "undefined" ? process.env["GEMINI_API_KEY"] : undefined);
   }
 
   async countTokens(text: string): Promise<number> {
@@ -26,7 +26,7 @@ export class GeminiProvider implements AIProvider {
     const systemInst = params.systemInstruction;
     const isMockMode =
       this.apiKey === "mock" ||
-      (typeof process !== "undefined" && process.env?.AI_MOCK_MODE === "true");
+      (typeof process !== "undefined" && process.env["AI_MOCK_MODE"] === "true");
 
     if (isMockMode) {
       return this.getMockResponse(params);
@@ -34,7 +34,8 @@ export class GeminiProvider implements AIProvider {
 
     if (!this.apiKey) {
       const err = new Error("GEMINI_API_KEY no está configurada en las variables de entorno.");
-      (err as unknown as Record<string, string>).code = "PROVIDER_AUTH_ERROR";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_AUTH_ERROR";
       throw err;
     }
 
@@ -64,7 +65,8 @@ export class GeminiProvider implements AIProvider {
         "Error de conexión al llamar a Gemini: " +
           (netErr instanceof Error ? netErr.message : String(netErr)),
       );
-      (err as unknown as Record<string, string>).code = "PROVIDER_TIMEOUT";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_TIMEOUT";
       throw err;
     }
 
@@ -78,7 +80,8 @@ export class GeminiProvider implements AIProvider {
       const err = new Error(
         `Error en Gemini API (${response.status}): ${errText.substring(0, 200)}`,
       );
-      (err as unknown as Record<string, string>).code = code;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = code;
       throw err;
     }
 
@@ -87,7 +90,8 @@ export class GeminiProvider implements AIProvider {
 
     if (!text.trim()) {
       const err = new Error("Gemini devolvió una respuesta vacía o sin candidatos válidos.");
-      (err as unknown as Record<string, string>).code = "PROVIDER_INVALID_RESPONSE";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any).code = "PROVIDER_INVALID_RESPONSE";
       throw err;
     }
 
@@ -109,126 +113,96 @@ export class GeminiProvider implements AIProvider {
 
   private async getMockResponse(params: GenerateParams): Promise<ProviderResponse> {
     const prompt = params.prompt;
-    const systemInst = params.systemInstruction;
-    const tokensIn = await this.countTokens((systemInst || "") + " " + prompt);
+    const systemInst = params.systemInstruction || "";
+    let mockText = "";
 
-    let responseText = "";
-    if (params.responseFormat === "json") {
-      if (prompt.includes("PLANNER") || prompt.includes("planner")) {
-        responseText = JSON.stringify({
-          title: "Introducción Práctica a AI Lab Academy",
-          objectives: [
-            "Comprender los conceptos fundamentales del desarrollo asistido por IA",
-            "Aprender a estructurar un flujo de trabajo con agentes inteligentes",
-            "Aplicar buenas prácticas de ingeniería de prompts y autoría de bloques",
-          ],
-          level: "Principiante",
-          estimatedDurationMinutes: 25,
-          sections: [
-            {
-              id: "sec-1",
-              title: "Introducción y Conceptos Clave",
-              purpose: "Establecer la base conceptual y contextualizar el aprendizaje.",
-              targetBlockTypes: ["heading", "paragraph", "callout"],
-              keyPoints: [
-                "Definición de IA Generativa",
-                "Casos de uso en el aula",
-                "Beneficios principales",
-              ],
-            },
-            {
-              id: "sec-2",
-              title: "Ejemplos Prácticos y Código",
-              purpose: "Mostrar la implementación técnica con código interactivo.",
-              targetBlockTypes: ["heading", "paragraph", "code", "checklist"],
-              keyPoints: [
-                "Estructura de un prompt",
-                "Validación de salida",
-                "Checklist de verificación",
-              ],
-            },
-            {
-              id: "sec-3",
-              title: "Resumen y Evaluación",
-              purpose: "Sintetizar el aprendizaje y consolidar dudas frecuentes.",
-              targetBlockTypes: ["heading", "paragraph", "accordion"],
-              keyPoints: ["Puntos clave", "Preguntas frecuentes"],
-            },
-          ],
-          estimatedBlocksCount: 9,
-          recommendedResources: ["https://ai.google.dev/docs", "https://react.dev"],
-          quizIdeas: [
-            "¿Cuál es el rol principal del agente de autoría?",
-            "¿Cómo se garantiza la validación de bloques?",
-          ],
-        });
-      } else {
-        responseText = JSON.stringify({
-          blocks: [
-            {
-              type: "heading",
-              content_json: { text: "Fundamentos de Inteligencia Artificial", level: 1 },
-            },
-            {
-              type: "paragraph",
-              content_json: {
-                text: "Bienvenido a esta lección interactiva. Aquí exploraremos cómo la IA transforma el diseño educativo y la creación de contenidos adaptativos.",
-              },
-            },
-            {
-              type: "callout",
-              content_json: {
-                type: "info",
-                title: "Nota Importante",
-                text: "Toda lección generada por IA sigue una estricta validación de esquemas en el Authoring Studio.",
-              },
-            },
-            {
-              type: "heading",
-              content_json: { text: "Código de Ejemplo", level: 2 },
-            },
-            {
-              type: "code",
-              content_json: {
-                language: "typescript",
-                filename: "agent.ts",
-                code: "const agent = new LessonAuthorAgent();\nconst result = await agent.generate(prompt);",
-              },
-            },
-            {
-              type: "checklist",
-              content_json: {
-                items: [
-                  { id: "c1", text: "Definir objetivos", checked: true },
-                  { id: "c2", text: "Generar estructura", checked: true },
-                  { id: "c3", text: "Validar y publicar", checked: false },
-                ],
-              },
-            },
-            {
-              type: "accordion",
-              content_json: {
-                items: [
-                  {
-                    id: "a1",
-                    title: "¿La IA escribe directo en DB?",
-                    content:
-                      "No, la IA genera un objeto borrador que debe ser revisado y aceptado por el usuario.",
-                  },
-                ],
-              },
-            },
-          ],
-        });
-      }
+    if (systemInst.includes("Planificador") || prompt.includes("Planific")) {
+      mockText = JSON.stringify({
+        title: "Introducción Práctica a la Inteligencia Artificial",
+        objectives: [
+          "Comprender los conceptos fundamentales de IA Generativa",
+          "Aprender a diseñar prompts efectivos",
+          "Aplicar agentes en entornos de desarrollo",
+        ],
+        level: "Intermedio",
+        estimatedDurationMinutes: 20,
+        sections: [
+          {
+            id: "sec-1",
+            title: "Conceptos Fundamentales",
+            purpose: "Establecer la base teórica de modelos LLM",
+            targetBlockTypes: ["heading", "paragraph", "callout"],
+            keyPoints: ["Transformers", "Tokens", "Atención"],
+          },
+          {
+            id: "sec-2",
+            title: "Ingeniería de Prompts",
+            purpose: "Aprender patrones de diseño de instrucciones",
+            targetBlockTypes: ["heading", "paragraph", "code", "checklist"],
+            keyPoints: ["Zero-shot", "Few-shot", "Chain of Thought"],
+          },
+          {
+            id: "sec-3",
+            title: "Evaluación y Práctica",
+            purpose: "Comprobar el aprendizaje mediante preguntas interactivas",
+            targetBlockTypes: ["heading", "quiz", "accordion"],
+            keyPoints: ["Casos de uso", "Preguntas de repaso"],
+          },
+        ],
+        estimatedBlocksCount: 8,
+      });
     } else {
-      responseText = "Resultado generado por el asistente de autoría IA.";
+      mockText = JSON.stringify({
+        blocks: [
+          {
+            type: "heading",
+            content_json: { text: "1. Introducción a los Modelos de Lenguaje", level: 1 },
+          },
+          {
+            type: "paragraph",
+            content_json: {
+              text: "Los modelos de lenguaje como Gemini permiten procesar y generar texto de forma altamente contextual.",
+            },
+          },
+          {
+            type: "callout",
+            content_json: {
+              type: "info",
+              title: "Nota Importante",
+              text: "Siempre debes validar la salida de la IA antes de insertarla directamente en producción.",
+            },
+          },
+          {
+            type: "heading",
+            content_json: { text: "2. Ejemplo Práctico en TypeScript", level: 2 },
+          },
+          {
+            type: "code",
+            content_json: {
+              language: "typescript",
+              code: "import { GoogleGenAI } from '@google/genai';\n\nconst ai = new GoogleGenAI();\nconsole.log('AI Initialized');",
+              filename: "example.ts",
+            },
+          },
+          {
+            type: "checklist",
+            content_json: {
+              items: [
+                { id: "c1", text: "Configurar API Key", checked: true },
+                { id: "c2", text: "Definir Schema Zod", checked: false },
+                { id: "c3", text: "Probar Auto-repair", checked: false },
+              ],
+            },
+          },
+        ],
+      });
     }
 
-    const tokensOut = await this.countTokens(responseText);
+    const tokensIn = await this.countTokens(systemInst + " " + prompt);
+    const tokensOut = await this.countTokens(mockText);
 
     return {
-      text: responseText,
+      text: mockText,
       tokenUsage: {
         tokensInput: tokensIn,
         tokensOutput: tokensOut,

@@ -26,7 +26,7 @@ export class LessonAuthorAgent {
       model: settings?.model || "gemini-3.6-flash",
       temperature: settings?.temperature ?? 0.7,
       maxTokens: settings?.maxTokens || 4000,
-      apiKey: settings?.apiKey,
+      ...(settings?.apiKey ? { apiKey: settings.apiKey } : {}),
     };
   }
 
@@ -40,7 +40,7 @@ export class LessonAuthorAgent {
     ) => void,
     signal?: AbortSignal,
   ): Promise<GenerationResult> {
-    const isBrowser = typeof window !== "undefined" && !process.env.VITEST;
+    const isBrowser = typeof window !== "undefined" && !process.env["VITEST"];
 
     if (isBrowser) {
       onProgress?.("planning");
@@ -66,7 +66,8 @@ export class LessonAuthorAgent {
         const errMsg =
           data?.error_message || error?.message || "Error al invocar la función de generación IA.";
         const err = new Error(`[${errCode}] ${errMsg}`);
-        (err as unknown as Record<string, string>).code = errCode;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (err as any)["code"] = errCode;
         throw err;
       }
 
@@ -88,7 +89,9 @@ export class LessonAuthorAgent {
           estimatedCost: data.estimated_cost || 0,
           repairCount: data.repair_count || 0,
           durationMs: data.duration_ms || 0,
+          errorsCount: 0,
         },
+        repairLog: [],
       };
     }
 

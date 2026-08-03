@@ -13,7 +13,10 @@ export async function createGenerationJob(
       supabase.rpc as unknown as (
         name: string,
         args: Record<string, unknown>,
-      ) => Promise<{ data: { success: boolean; job_id: string }; error: { message: string } | null }>
+      ) => Promise<{
+        data: { success: boolean; job_id: string };
+        error: { message: string } | null;
+      }>
     )("create_generation_job_rpc", {
       p_lesson_id: lessonId,
       p_provider: provider,
@@ -23,7 +26,10 @@ export async function createGenerationJob(
     });
 
     if (error || !data?.job_id) {
-      if (typeof process !== "undefined" && (process.env.VITEST || process.env.NODE_ENV === "test")) {
+      if (
+        typeof process !== "undefined" &&
+        (process.env["VITEST"] || process.env["NODE_ENV"] === "test")
+      ) {
         return `job-test-${Math.random().toString(36).substring(2, 9)}`;
       }
       const errMsg =
@@ -34,7 +40,10 @@ export async function createGenerationJob(
 
     return data.job_id;
   } catch (err) {
-    if (typeof process !== "undefined" && (process.env.VITEST || process.env.NODE_ENV === "test")) {
+    if (
+      typeof process !== "undefined" &&
+      (process.env["VITEST"] || process.env["NODE_ENV"] === "test")
+    ) {
       return `job-test-${Math.random().toString(36).substring(2, 9)}`;
     }
     throw err;
@@ -81,7 +90,10 @@ export async function updateGenerationJob(
 
     return Boolean(data?.success);
   } catch (err) {
-    if (typeof process !== "undefined" && (process.env.VITEST || process.env.NODE_ENV === "test")) {
+    if (
+      typeof process !== "undefined" &&
+      (process.env["VITEST"] || process.env["NODE_ENV"] === "test")
+    ) {
       return true;
     }
     console.warn("Error calling update_generation_job_rpc:", err);

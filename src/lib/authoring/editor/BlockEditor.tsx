@@ -1,5 +1,5 @@
 import React from "react";
-import type { AuthoringBlock } from "../types";
+import type { AuthoringBlock, AuthoringBlockSettings } from "../types";
 import { BlockRegistry } from "../blocks/registry";
 import { GripVertical, EyeOff, Copy, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,13 +41,8 @@ export function BlockEditor({
     );
   }
 
-  const EditorComponent = def.editor as React.ComponentType<{
-    block: AuthoringBlock;
-    content: Record<string, unknown>;
-    settings: AuthoringBlockSettings;
-    onChangeContent: (newContent: Partial<Record<string, unknown>>) => void;
-    onChangeSettings: (newSettings: Partial<AuthoringBlockSettings>) => void;
-  }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const EditorComponent = def.editor as React.ComponentType<any>;
   const validationResult = def.validator.safeParse(block.content_json);
   const hasError = !validationResult.success;
 
@@ -138,7 +133,7 @@ export function BlockEditor({
           onChangeContent={(partial: Record<string, unknown>) =>
             onChangeContent({ ...block.content_json, ...partial })
           }
-          onChangeSettings={(partial: Record<string, unknown>) =>
+          onChangeSettings={(partial: AuthoringBlockSettings) =>
             onChangeSettings({ ...block.settings_json, ...partial })
           }
         />

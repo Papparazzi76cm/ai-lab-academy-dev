@@ -23,13 +23,20 @@ function AuthoringStudioRoute() {
   const { data: lessonData, isLoading: isLessonLoading } = useQuery({
     queryKey: ["authoring-lesson", lessonId],
     queryFn: async () => {
-      const { data: lesson, error: lErr } = await supabase
+      const { data: lessonRaw, error: lErr } = await supabase
         .from("lessons")
-        .select("id, title, course_id, revision")
+        .select("*")
         .eq("id", lessonId)
         .single();
 
       if (lErr) throw lErr;
+
+      const lesson = lessonRaw as unknown as {
+        id: string;
+        title: string;
+        course_id?: string;
+        revision?: number;
+      };
 
       const { data: blocks, error: bErr } = await supabase
         .from("lesson_blocks")
@@ -83,7 +90,13 @@ function AuthoringStudioRoute() {
       lessonTitle={lessonData.lesson.title}
       initialBlocks={lessonData.blocks}
       initialRevision={lessonData.revision}
-      onBack={() => navigate({ to: `/admin/courses/${lessonData.lesson.course_id}` })}
+      onBack={() =>
+        navigate({
+          to: lessonData.lesson.course_id
+            ? `/admin/courses/${lessonData.lesson.course_id}`
+            : "/admin/courses",
+        })
+      }
     />
   );
 }
