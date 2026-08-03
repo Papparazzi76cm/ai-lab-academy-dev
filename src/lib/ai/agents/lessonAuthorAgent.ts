@@ -1,3 +1,4 @@
+import { supabase } from "@/integrations/supabase/client";
 import type { AuthoringBlock } from "@/lib/authoring/types";
 import type {
   AISettings,
@@ -39,10 +40,62 @@ export class LessonAuthorAgent {
     ) => void,
     signal?: AbortSignal,
   ): Promise<GenerationResult> {
+    const isBrowser = typeof window !== "undefined" && !process.env.VITEST;
+
+    if (isBrowser) {
+      onProgress?.("planning");
+
+      const { data, error } = await supabase.functions.invoke("generate-lesson-ai", {
+        body: {
+          lesson_id: lessonId,
+          prompt,
+          level: context?.level,
+          duration: context?.durationMinutes,
+          language: context?.language,
+          tone: context?.tone,
+          audience: context?.audience,
+          objectives: context?.objectives,
+          provider: this.settings.provider,
+          model: this.settings.model,
+          temperature: this.settings.temperature,
+        },
+      });
+
+      if (error || !data || data.error_code) {
+        const errCode = data?.error_code || "GENERATION_FAILED";
+        const errMsg =
+          data?.error_message || error?.message || "Error al invocar la función de generación IA.";
+        const err = new Error(`[${errCode}] ${errMsg}`);
+        (err as unknown as Record<string, string>).code = errCode;
+        throw err;
+      }
+
+      onProgress?.("generating", { plan: data.plan });
+      onProgress?.("validating");
+      onProgress?.("repairing");
+      onProgress?.("completed");
+
+      return {
+        jobId: data.job_id,
+        status: "completed" as GenerationJobStatus,
+        plan: data.plan,
+        blocks: data.blocks || [],
+        telemetry: {
+          provider: this.settings.provider,
+          model: this.settings.model,
+          tokensInput: data.token_usage?.tokens_input || 0,
+          tokensOutput: data.token_usage?.tokens_output || 0,
+          estimatedCost: data.estimated_cost || 0,
+          repairCount: data.repair_count || 0,
+          durationMs: data.duration_ms || 0,
+        },
+      };
+    }
+
+    // Node / Test fallback: execute locally via pipeline
     const provider = ProviderFactory.create(this.settings);
     const pipeline = new AuthoringPipeline(provider);
 
-    // 1. Create DB Job (status: queued -> running)
     const jobId = await createGenerationJob(
       lessonId,
       this.settings.provider,
@@ -60,7 +113,6 @@ export class LessonAuthorAgent {
     }
 
     try {
-      // 2. Execute Pipeline
       const result = await pipeline.execute(prompt, context, onProgress);
 
       if (signal?.aborted) {
@@ -72,7 +124,6 @@ export class LessonAuthorAgent {
         };
       }
 
-      // 3. Record completed job telemetry
       await updateGenerationJob(
         jobId,
         "completed",

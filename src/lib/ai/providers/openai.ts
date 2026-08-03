@@ -24,50 +24,89 @@ export class OpenAIProvider implements AIProvider {
   async generate(params: GenerateParams): Promise<ProviderResponse> {
     const prompt = params.prompt;
     const systemInst = params.systemInstruction;
+    const isMockMode =
+      this.apiKey === "mock" ||
+      (typeof process !== "undefined" && process.env?.AI_MOCK_MODE === "true");
 
-    if (this.apiKey && this.apiKey !== "mock") {
-      try {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: this.model,
-            messages: [
-              ...(systemInst ? [{ role: "system", content: systemInst }] : []),
-              { role: "user", content: prompt },
-            ],
-            temperature: params.temperature ?? 0.7,
-            max_tokens: params.maxTokens,
-            response_format: params.responseFormat === "json" ? { type: "json_object" } : undefined,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const text = data.choices?.[0]?.message?.content || "";
-          const usage = data.usage || {};
-          const tokensIn = usage.prompt_tokens || (await this.countTokens(prompt));
-          const tokensOut = usage.completion_tokens || (await this.countTokens(text));
-
-          return {
-            text,
-            tokenUsage: {
-              tokensInput: tokensIn,
-              tokensOutput: tokensOut,
-              totalTokens: tokensIn + tokensOut,
-            },
-            rawResponse: data,
-          };
-        }
-      } catch (err) {
-        console.warn("OpenAI API call failed, falling back to deterministic response:", err);
-      }
+    if (isMockMode) {
+      return this.getMockResponse(params);
     }
 
-    // Fallback/Deterministic mode
+    if (!this.apiKey) {
+      const err = new Error("OPENAI_API_KEY no está configurada en las variables de entorno.");
+      (err as unknown as Record<string, string>).code = "PROVIDER_AUTH_ERROR";
+      throw err;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            ...(systemInst ? [{ role: "system", content: systemInst }] : []),
+            { role: "user", content: prompt },
+          ],
+          temperature: params.temperature ?? 0.7,
+          max_tokens: params.maxTokens,
+          response_format: params.responseFormat === "json" ? { type: "json_object" } : undefined,
+        }),
+      });
+    } catch (netErr) {
+      const err = new Error(
+        "Error de conexión con OpenAI: " +
+          (netErr instanceof Error ? netErr.message : String(netErr)),
+      );
+      (err as unknown as Record<string, string>).code = "PROVIDER_TIMEOUT";
+      throw err;
+    }
+
+    if (!response.ok) {
+      let code = "PROVIDER_UNAVAILABLE";
+      if (response.status === 401 || response.status === 403) code = "PROVIDER_AUTH_ERROR";
+      else if (response.status === 429) code = "PROVIDER_RATE_LIMIT";
+      else if (response.status === 504) code = "PROVIDER_TIMEOUT";
+
+      const errText = await response.text().catch(() => "");
+      const err = new Error(
+        `Error en OpenAI API (${response.status}): ${errText.substring(0, 200)}`,
+      );
+      (err as unknown as Record<string, string>).code = code;
+      throw err;
+    }
+
+    const data = await response.json().catch(() => null);
+    const text = data?.choices?.[0]?.message?.content || "";
+
+    if (!text.trim()) {
+      const err = new Error("OpenAI devolvió una respuesta vacía.");
+      (err as unknown as Record<string, string>).code = "PROVIDER_INVALID_RESPONSE";
+      throw err;
+    }
+
+    const usage = data?.usage || {};
+    const tokensIn = usage.prompt_tokens || (await this.countTokens(prompt));
+    const tokensOut = usage.completion_tokens || (await this.countTokens(text));
+
+    return {
+      text,
+      tokenUsage: {
+        tokensInput: tokensIn,
+        tokensOutput: tokensOut,
+        totalTokens: tokensIn + tokensOut,
+      },
+      rawResponse: data,
+    };
+  }
+
+  private async getMockResponse(params: GenerateParams): Promise<ProviderResponse> {
+    const prompt = params.prompt;
+    const systemInst = params.systemInstruction;
     const tokensIn = await this.countTokens((systemInst || "") + " " + prompt);
     let responseText = "";
 

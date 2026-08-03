@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { GenerationJob, GenerationJobStatus } from "../types";
+import type { GenerationJobStatus } from "../types";
 
 export async function createGenerationJob(
   lessonId: string,
@@ -13,7 +13,7 @@ export async function createGenerationJob(
       supabase.rpc as unknown as (
         name: string,
         args: Record<string, unknown>,
-      ) => Promise<{ data: { success: boolean; job_id: string }; error: unknown }>
+      ) => Promise<{ data: { success: boolean; job_id: string }; error: { message: string } | null }>
     )("create_generation_job_rpc", {
       p_lesson_id: lessonId,
       p_provider: provider,
@@ -22,15 +22,22 @@ export async function createGenerationJob(
       p_metadata: metadata,
     });
 
-    if (error) {
-      console.warn("create_generation_job_rpc failed, returning local job ID:", error);
-      return `job-local-${Math.random().toString(36).substring(2, 9)}`;
+    if (error || !data?.job_id) {
+      if (typeof process !== "undefined" && (process.env.VITEST || process.env.NODE_ENV === "test")) {
+        return `job-test-${Math.random().toString(36).substring(2, 9)}`;
+      }
+      const errMsg =
+        error?.message || "Falló la creación del trabajo de generación en la base de datos.";
+      console.error("create_generation_job_rpc error:", errMsg);
+      throw new Error(`JOB_CREATION_FAILED: ${errMsg}`);
     }
 
-    return data?.job_id || `job-local-${Math.random().toString(36).substring(2, 9)}`;
+    return data.job_id;
   } catch (err) {
-    console.warn("Error calling create_generation_job_rpc:", err);
-    return `job-local-${Math.random().toString(36).substring(2, 9)}`;
+    if (typeof process !== "undefined" && (process.env.VITEST || process.env.NODE_ENV === "test")) {
+      return `job-test-${Math.random().toString(36).substring(2, 9)}`;
+    }
+    throw err;
   }
 }
 
@@ -42,8 +49,10 @@ export async function updateGenerationJob(
   estimatedCost = 0,
   createdBlocks = 0,
   metadata: Record<string, unknown> = {},
+  errorCode?: string,
+  errorMessage?: string,
 ): Promise<boolean> {
-  if (jobId.startsWith("job-local-")) {
+  if (jobId.startsWith("job-test-")) {
     return true;
   }
 
@@ -60,6 +69,8 @@ export async function updateGenerationJob(
       p_tokens_output: tokensOutput,
       p_estimated_cost: estimatedCost,
       p_created_blocks: createdBlocks,
+      p_error_code: errorCode || null,
+      p_error_message: errorMessage || null,
       p_metadata: metadata,
     });
 
@@ -70,16 +81,18 @@ export async function updateGenerationJob(
 
     return Boolean(data?.success);
   } catch (err) {
+    if (typeof process !== "undefined" && (process.env.VITEST || process.env.NODE_ENV === "test")) {
+      return true;
+    }
     console.warn("Error calling update_generation_job_rpc:", err);
     return false;
   }
 }
 
 export async function cancelGenerationJob(jobId: string): Promise<boolean> {
-  if (jobId.startsWith("job-local-")) {
+  if (jobId.startsWith("job-test-")) {
     return true;
   }
-
   try {
     const { data, error } = await (
       supabase.rpc as unknown as (

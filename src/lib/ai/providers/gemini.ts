@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import type { AIProvider } from "./base";
 import { estimateModelCost, approxTokenCount } from "./base";
 import type { GenerateParams, ProviderResponse } from "../types";
@@ -25,52 +24,94 @@ export class GeminiProvider implements AIProvider {
   async generate(params: GenerateParams): Promise<ProviderResponse> {
     const prompt = params.prompt;
     const systemInst = params.systemInstruction;
+    const isMockMode =
+      this.apiKey === "mock" ||
+      (typeof process !== "undefined" && process.env?.AI_MOCK_MODE === "true");
 
-    // If API key is available, call GoogleGenAI SDK
-    if (this.apiKey && this.apiKey !== "mock") {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey: this.apiKey,
-          httpOptions: {
-            headers: {
-              "User-Agent": "aistudio-build",
-            },
-          },
-        });
-
-        const response = await ai.models.generateContent({
-          model: this.model,
-          contents: prompt,
-          config: {
-            systemInstruction: systemInst,
-            temperature: params.temperature ?? 0.7,
-            maxOutputTokens: params.maxTokens,
-            responseMimeType: params.responseFormat === "json" ? "application/json" : "text/plain",
-          },
-        });
-
-        const text = response.text || "";
-        const tokensIn = await this.countTokens((systemInst || "") + " " + prompt);
-        const tokensOut = await this.countTokens(text);
-
-        return {
-          text,
-          tokenUsage: {
-            tokensInput: tokensIn,
-            tokensOutput: tokensOut,
-            totalTokens: tokensIn + tokensOut,
-          },
-          rawResponse: response,
-        };
-      } catch (err) {
-        console.warn("Gemini API call failed, falling back to deterministic generator:", err);
-      }
+    if (isMockMode) {
+      return this.getMockResponse(params);
     }
 
-    // Fallback/Deterministic mode for offline/demo/testing when API key is unconfigured or fails
+    if (!this.apiKey) {
+      const err = new Error("GEMINI_API_KEY no está configurada en las variables de entorno.");
+      (err as unknown as Record<string, string>).code = "PROVIDER_AUTH_ERROR";
+      throw err;
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const payload = {
+      systemInstruction: systemInst ? { parts: [{ text: systemInst }] } : undefined,
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: params.temperature ?? 0.7,
+        maxOutputTokens: params.maxTokens,
+        responseMimeType: params.responseFormat === "json" ? "application/json" : "text/plain",
+      },
+    };
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "aistudio-build",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (netErr) {
+      const err = new Error(
+        "Error de conexión al llamar a Gemini: " +
+          (netErr instanceof Error ? netErr.message : String(netErr)),
+      );
+      (err as unknown as Record<string, string>).code = "PROVIDER_TIMEOUT";
+      throw err;
+    }
+
+    if (!response.ok) {
+      let code = "PROVIDER_UNAVAILABLE";
+      if (response.status === 401 || response.status === 403) code = "PROVIDER_AUTH_ERROR";
+      else if (response.status === 429) code = "PROVIDER_RATE_LIMIT";
+      else if (response.status === 504) code = "PROVIDER_TIMEOUT";
+
+      const errText = await response.text().catch(() => "");
+      const err = new Error(
+        `Error en Gemini API (${response.status}): ${errText.substring(0, 200)}`,
+      );
+      (err as unknown as Record<string, string>).code = code;
+      throw err;
+    }
+
+    const data = await response.json().catch(() => null);
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    if (!text.trim()) {
+      const err = new Error("Gemini devolvió una respuesta vacía o sin candidatos válidos.");
+      (err as unknown as Record<string, string>).code = "PROVIDER_INVALID_RESPONSE";
+      throw err;
+    }
+
+    const usage = data?.usageMetadata || {};
+    const tokensIn =
+      usage.promptTokenCount || (await this.countTokens((systemInst || "") + " " + prompt));
+    const tokensOut = usage.candidatesTokenCount || (await this.countTokens(text));
+
+    return {
+      text,
+      tokenUsage: {
+        tokensInput: tokensIn,
+        tokensOutput: tokensOut,
+        totalTokens: tokensIn + tokensOut,
+      },
+      rawResponse: data,
+    };
+  }
+
+  private async getMockResponse(params: GenerateParams): Promise<ProviderResponse> {
+    const prompt = params.prompt;
+    const systemInst = params.systemInstruction;
     const tokensIn = await this.countTokens((systemInst || "") + " " + prompt);
 
-    // Generate fallback text based on context or requested format
     let responseText = "";
     if (params.responseFormat === "json") {
       if (prompt.includes("PLANNER") || prompt.includes("planner")) {
